@@ -11,6 +11,7 @@
 		08290777FDC8F4A16CC7E231 /* SidebarFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57E8B78AFE5E90D7D1B044AC /* SidebarFilter.swift */; };
 		0947139B78E3F9D9857F730A /* GitService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 666D8599524120C18BABB3FF /* GitService.swift */; };
 		0BC298A026115FE9AC9A14DD /* SymlinkInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BB7B6A6241828E4EFD62F95 /* SymlinkInstaller.swift */; };
+		1426E7FB1017F49FB7C1E4D2 /* SkillCardComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1426E7FA1017F49FB7C1E4D2 /* SkillCardComponents.swift */; };
 		164C12203FA1D8638EB72C2F /* SandboxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6BD0C5D68F6CEB4FE4C14CD /* SandboxView.swift */; };
 		2532A8AD74AC05FE72D82528 /* VersionHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50069145DEE4F107B789596A /* VersionHistoryView.swift */; };
 		2639C198F4FBE87057F9AD62 /* FlowLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8813500160440D0FCB9E5DD9 /* FlowLayout.swift */; };
@@ -55,6 +56,7 @@
 		0525175ED2964BB6E2E0B1B0 /* SkillsManagerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkillsManagerApp.swift; sourceTree = "<group>"; };
 		072BA9F86FFF3B545CCC344D /* SkillListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkillListView.swift; sourceTree = "<group>"; };
 		1BCDCC5D3CA0926A51A3D84B /* DiscoverSkill.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverSkill.swift; sourceTree = "<group>"; };
+		1426E7FA1017F49FB7C1E4D2 /* SkillCardComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkillCardComponents.swift; sourceTree = "<group>"; };
 		2D967A5962BEEE7981921A4F /* OpenClawAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenClawAdapter.swift; sourceTree = "<group>"; };
 		2F161109A29CF7DCE1257393 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		3BE38B49272B1AA0A1752A87 /* ClaudeCodeAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeCodeAdapter.swift; sourceTree = "<group>"; };
@@ -119,6 +121,7 @@
 				F6BD0C5D68F6CEB4FE4C14CD /* SandboxView.swift */,
 				8B204889413D1B5B1DE273D2 /* SettingsView.swift */,
 				AFF0465C82F147C7332064AC /* SidebarView.swift */,
+				1426E7FA1017F49FB7C1E4D2 /* SkillCardComponents.swift */,
 				C471621958512C86DD74AE10 /* SkillDetailView.swift */,
 				072BA9F86FFF3B545CCC344D /* SkillListView.swift */,
 				50069145DEE4F107B789596A /* VersionHistoryView.swift */,
@@ -305,6 +308,7 @@
 				F65E3F18110FF168816B0597 /* SettingsView.swift in Sources */,
 				08290777FDC8F4A16CC7E231 /* SidebarFilter.swift in Sources */,
 				7970AB614D3D0C641C9FB0EC /* SidebarView.swift in Sources */,
+				1426E7FB1017F49FB7C1E4D2 /* SkillCardComponents.swift in Sources */,
 				B0EA7B739614499B5988BBEC /* Skill+Mock.swift in Sources */,
 				B5B708ED0875BA8358F12ECC /* Skill.swift in Sources */,
 				C74ED18341F7EE56F00197B8 /* SkillDetailView.swift in Sources */,

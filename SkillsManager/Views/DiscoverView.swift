@@ -127,10 +127,12 @@ struct DiscoverView: View {
                             entry: entry,
                             isInstalled: installedSkills.contains(where: { $0.name == entry.skillId || $0.name == entry.name }),
                             isInstalling: installingSkillIDs.contains(entry.id),
+                            onLoadDetail: { Task { await onLoadDetail(entry) } },
                             onTry: { Task { await onTry(entry) } },
                             onInstall: { Task { await onInstall(entry) } },
                             onUninstall: { Task { await onUninstall(entry) } }
                         )
+                        .listRowSeparator(.hidden)
                         .tag(entry.id)
                     }
                 }
@@ -166,40 +168,22 @@ private struct DiscoverSkillRow: View {
     let entry: DiscoverSkill
     let isInstalled: Bool
     let isInstalling: Bool
+    let onLoadDetail: () -> Void
     let onTry: () -> Void
     let onInstall: () -> Void
     let onUninstall: () -> Void
 
-    @State private var isHovered = false
-
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 8) {
-                    Text(entry.name)
-                        .font(.body)
-                        .fontWeight(.medium)
-                        .lineLimit(1)
-                    if isInstalled {
-                        Text("Installed")
-                            .font(.caption2)
-                            .foregroundStyle(.green)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(.green.opacity(0.10), in: Capsule())
-                    }
-                }
-                Text(entry.source)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                Text("\(entry.installs.formatted()) installs")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+        SkillCard(
+            title: entry.name,
+            description: entry.summary ?? ""
+        ) {
+            if isInstalled {
+                SkillMetaBadge(text: "Installed", tint: .green)
             }
-
-            Spacer(minLength: 8)
-
+            SkillMetaBadge(text: entry.source)
+            SkillMetaBadge(text: "\(entry.installs.formatted()) installs")
+        } actions: {
             HStack(spacing: 8) {
                 Button(isInstalled ? "Try Again" : "Try", action: onTry)
                     .buttonStyle(.bordered)
@@ -227,21 +211,11 @@ private struct DiscoverSkillRow: View {
                 }
             }
         }
-        .padding(.vertical, 6)
-        .padding(.horizontal, 8)
-        .background(
-            RoundedRectangle(cornerRadius: 6)
-                .fill(isHovered ? Color.primary.opacity(0.05) : Color.clear)
-        )
-        .overlay(alignment: .bottom) {
-            RoundedRectangle(cornerRadius: 6)
-                .fill(Color.primary.opacity(isHovered ? 0.08 : 0))
-                .frame(height: 2)
-                .padding(.horizontal, 2)
+        .task(id: entry.id) {
+            if entry.summary == nil {
+                onLoadDetail()
+            }
         }
-        .contentShape(Rectangle())
-        .onHover { isHovered = $0 }
-        .animation(.easeInOut(duration: 0.12), value: isHovered)
     }
 }
 

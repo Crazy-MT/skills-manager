@@ -48,13 +48,13 @@ private struct DetailContent: View {
             VStack(alignment: .leading, spacing: 16) {
                 header
                 metaRow
+                actionRow
                 agentTags
                 Divider()
                 markdownBody
             }
             .padding(20)
         }
-        .toolbar { toolbarContent }
         .sheet(isPresented: $showInstallToAgent) {
             InstallToAgentView(skill: skill, onInstall: onInstallToAgent)
         }
@@ -63,12 +63,11 @@ private struct DetailContent: View {
     // MARK: Header
 
     private var header: some View {
-        HStack(alignment: .top) {
+        VStack(alignment: .leading, spacing: 8) {
             Text(skill.displayName)
                 .font(.largeTitle)
-                .fontWeight(.bold)
+                .bold()
                 .textSelection(.enabled)
-            Spacer()
             openInEditorButton
         }
     }
@@ -88,12 +87,7 @@ private struct DetailContent: View {
     private var metaRow: some View {
         HStack(spacing: 8) {
             if let version = skill.version {
-                Text("v\(version)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 3)
-                    .background(.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 4))
+                SkillMetaBadge(text: "v\(version)")
             }
             sourceBadge
         }
@@ -108,12 +102,38 @@ private struct DetailContent: View {
         case .plugin(let pluginSource, _):    label = pluginSource
         case .projectLocal:                   label = "Project"
         }
-        return Text(label)
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 3)
-            .background(.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 4))
+        return SkillMetaBadge(text: label)
+    }
+
+    private var actionRow: some View {
+        HStack(spacing: 8) {
+            Button {
+                onToggleStar()
+            } label: {
+                Label(
+                    skill.isStarred ? "Unstar" : "Star",
+                    systemImage: skill.isStarred ? "star.fill" : "star"
+                )
+            }
+            .buttonStyle(.bordered)
+            .foregroundStyle(skill.isStarred ? .yellow : .secondary)
+
+            if case .projectLocal = skill.source {
+                Button {
+                    onPromote()
+                } label: {
+                    Label("Promote to Global", systemImage: "arrow.up.circle")
+                }
+                .buttonStyle(.bordered)
+            }
+
+            Button {
+                showInstallToAgent = true
+            } label: {
+                Label("Install to Agent…", systemImage: "square.and.arrow.down.on.square")
+            }
+            .buttonStyle(.bordered)
+        }
     }
 
     // MARK: Agent tags
@@ -124,12 +144,7 @@ private struct DetailContent: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             ForEach(skill.compatibleAgents, id: \.self) { agent in
-                Text(agent)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 3)
-                    .background(.secondary.opacity(0.08), in: Capsule())
+                SkillMetaBadge(text: agent)
             }
         }
     }
@@ -142,7 +157,8 @@ private struct DetailContent: View {
                 markdown: skill.markdownContent,
                 options: AttributedString.MarkdownParsingOptions(
                     interpretedSyntax: .inlineOnlyPreservingWhitespace
-                )
+                ),
+                baseURL: nil
             ) {
                 Text(attributed)
                     .textSelection(.enabled)
@@ -153,46 +169,7 @@ private struct DetailContent: View {
         }
         .font(.body)
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    // MARK: Toolbar
-
-    @ToolbarContentBuilder
-    private var toolbarContent: some ToolbarContent {
-        ToolbarItem(placement: .primaryAction) {
-            Button {
-                onToggleStar()
-            } label: {
-                Label(
-                    skill.isStarred ? "Unstar" : "Star",
-                    systemImage: skill.isStarred ? "star.fill" : "star"
-                )
-            }
-            .foregroundStyle(skill.isStarred ? .yellow : .secondary)
-            .help(skill.isStarred ? "Remove from starred" : "Add to starred")
-        }
-
-        // "Promote to Global" only for project-local skills
-        if case .projectLocal = skill.source {
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    onPromote()
-                } label: {
-                    Label("Promote to Global", systemImage: "arrow.up.circle")
-                }
-                .help("Copy this skill to ~/.claude/skills/")
-            }
-        }
-
-        ToolbarItem(placement: .primaryAction) {
-            Button {
-                showInstallToAgent = true
-            } label: {
-                Label("Install to Agent…", systemImage: "square.and.arrow.down.on.square")
-            }
-            .help("Install this skill to another coding agent")
-        }
-    }
+}
 }
 
 #if DEBUG

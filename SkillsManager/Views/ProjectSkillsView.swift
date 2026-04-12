@@ -20,6 +20,7 @@ struct ProjectSkillsView: View {
                         skill: skill,
                         onPromote: { Task { await onPromote(skill) } }
                     )
+                    .listRowSeparator(.hidden)
                     .tag(skill)
                 }
                 .listStyle(.plain)

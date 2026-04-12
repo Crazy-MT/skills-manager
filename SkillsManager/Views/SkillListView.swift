@@ -1,6 +1,20 @@
 import SwiftUI
 
 struct SkillListView: View {
+    private enum AllSkillsTab: String, CaseIterable, Identifiable {
+        case local
+        case plugin
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .local: "From Local"
+            case .plugin: "From Plugin"
+            }
+        }
+    }
+
     let skills: [Skill]
     let filter: SidebarFilter
     @Binding var selectedSkill: Skill?
@@ -8,17 +22,17 @@ struct SkillListView: View {
     let onUninstall: (Skill) async -> Void
 
     @State private var listSelection: Set<Skill> = []
-    @State private var showPluginSkills = false
+    @State private var selectedAllSkillsTab: AllSkillsTab = .local
 
     private var pluginSkills: [Skill] {
-        filteredSkills.filter {
+        skills.filter {
             if case .plugin = $0.source { return true }
             return false
         }
     }
 
     private var standaloneSkills: [Skill] {
-        filteredSkills.filter {
+        skills.filter {
             if case .plugin = $0.source { return false }
             return true
         }
@@ -29,10 +43,7 @@ struct SkillListView: View {
         case .discover, .project:
             return []
         case .all:
-            return showPluginSkills ? skills : skills.filter {
-                if case .plugin = $0.source { return false }
-                return true
-            }
+            return selectedAllSkillsTab == .plugin ? pluginSkills : standaloneSkills
         case .installed:
             return skills.filter { $0.installState == .installed }
         case .starred:
@@ -58,89 +69,70 @@ struct SkillListView: View {
         Group {
             if filteredSkills.isEmpty {
                 ContentUnavailableView(
-                    "No Skills",
+                    filter == .all && selectedAllSkillsTab == .plugin ? "No Plugin Skills" : "No Skills",
                     systemImage: "tray",
-                    description: Text("No skills match the current filter.")
+                    description: Text(filter == .all && selectedAllSkillsTab == .plugin ? "No plugin-provided skills are available." : "No skills match the current filter.")
                 )
             } else {
-                List(selection: $listSelection) {
-                    if filter == .all && !pluginSkills.isEmpty && !standaloneSkills.isEmpty {
-                        Section("From Plugins") {
-                            ForEach(pluginSkills) { skill in
-                                SkillRow(
-                                    skill: skill,
-                                    onInstall: { Task { await onInstall(skill) } },
-                                    onUninstall: { Task { await onUninstall(skill) } }
-                                )
-                                .tag(skill)
-                            }
+                VStack(spacing: 0) {
+                    if filter == .all {
+                        Picker("Skill Source", selection: $selectedAllSkillsTab) {
+                            Text("From Local").tag(AllSkillsTab.local)
+                            Text("From Plugin").tag(AllSkillsTab.plugin)
                         }
-                        Section("Installed") {
-                            ForEach(standaloneSkills) { skill in
-                                SkillRow(
-                                    skill: skill,
-                                    onInstall: { Task { await onInstall(skill) } },
-                                    onUninstall: { Task { await onUninstall(skill) } }
-                                )
-                                .tag(skill)
-                            }
-                        }
-                    } else {
+                        .pickerStyle(.segmented)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 10)
+                        .padding(.bottom, 8)
+                    }
+
+                    List(selection: $listSelection) {
                         ForEach(filteredSkills) { skill in
                             SkillRow(
                                 skill: skill,
                                 onInstall: { Task { await onInstall(skill) } },
                                 onUninstall: { Task { await onUninstall(skill) } }
                             )
+                            .listRowSeparator(.hidden)
                             .tag(skill)
                         }
                     }
-                }
-                .listStyle(.plain)
-                .safeAreaInset(edge: .bottom, spacing: 0) {
-                    if listSelection.count > 1 {
-                        BatchActionBar(
-                            selection: listSelection,
-                            onInstall: {
-                                let batch = Array(listSelection)
-                                listSelection = []
-                                Task { await installBatch(batch) }
-                            },
-                            onUninstall: {
-                                let batch = Array(listSelection)
-                                listSelection = []
-                                Task { await uninstallBatch(batch) }
-                            },
-                            onDeselect: { listSelection = [] }
-                        )
+                    .listStyle(.plain)
+                    .safeAreaInset(edge: .bottom, spacing: 0) {
+                        if listSelection.count > 1 {
+                            BatchActionBar(
+                                selection: listSelection,
+                                onInstall: {
+                                    let batch = Array(listSelection)
+                                    listSelection = []
+                                    Task { await installBatch(batch) }
+                                },
+                                onUninstall: {
+                                    let batch = Array(listSelection)
+                                    listSelection = []
+                                    Task { await uninstallBatch(batch) }
+                                },
+                                onDeselect: { listSelection = [] }
+                            )
+                        }
                     }
                 }
             }
         }
         .navigationTitle(filter.title)
         .frame(minWidth: 260)
-        .toolbar {
-            if filter == .all {
-                ToolbarItem(placement: .automatic) {
-                    Group {
-                        if showPluginSkills {
-                            Button("Plugin Skills") { showPluginSkills.toggle() }
-                                .buttonStyle(.borderedProminent)
-                        } else {
-                            Button("Plugin Skills") { showPluginSkills.toggle() }
-                                .buttonStyle(.bordered)
-                        }
-                    }
-                    .controlSize(.small)
-                }
-            }
-        }
         // Sync single-selection → detail panel
         .onChange(of: listSelection) {
             selectedSkill = listSelection.count == 1 ? listSelection.first : nil
         }
         // Clear selection when filter changes
         .onChange(of: filter) {
+            listSelection = []
+            if filter != .all {
+                selectedAllSkillsTab = .local
+            }
+        }
+        .onChange(of: selectedAllSkillsTab) {
             listSelection = []
         }
     }
@@ -205,39 +197,66 @@ private struct SkillRow: View {
     let onInstall: () -> Void
     let onUninstall: () -> Void
 
-    @State private var isHovered = false
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text(skill.displayName)
-                    .font(.body)
-                    .fontWeight(.medium)
-                Spacer()
-                if skill.isStarred {
-                    Image(systemName: "star.fill")
-                        .foregroundStyle(.yellow)
-                        .font(.caption)
-                }
-                InstallStateBadge(state: skill.installState)
+        SkillCard(
+            title: skill.displayName,
+            description: skill.description
+        ) {
+            if skill.isStarred {
+                SkillMetaBadge(text: "Starred", tint: .yellow)
             }
-
-            Text(skill.description)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
-
+            sourceTypeBadge
+            sourceDetailBadge
+            installStateBadge
+        } actions: {
             SkillActionButtons(skill: skill, onInstall: onInstall, onUninstall: onUninstall)
         }
-        .padding(.vertical, 6)
-        .padding(.horizontal, 8)
-        .background(
-            RoundedRectangle(cornerRadius: 6)
-                .fill(isHovered ? Color.primary.opacity(0.05) : Color.clear)
-        )
-        .contentShape(Rectangle())
-        .onHover { isHovered = $0 }
-        .animation(.easeInOut(duration: 0.12), value: isHovered)
+    }
+
+    private var sourceTypeBadge: some View {
+        let label: String
+        let tint: Color
+        switch skill.source {
+        case .local:
+            label = "Local"
+            tint = .secondary
+        case .openClaw:
+            label = "OpenClaw"
+            tint = .blue
+        case .symlinked:
+            label = "Symlinked"
+            tint = .secondary
+        case .plugin:
+            label = "Plugin"
+            tint = .purple
+        case .projectLocal:
+            label = "Project"
+            tint = .secondary
+        }
+        return SkillMetaBadge(text: label, tint: tint)
+    }
+
+    @ViewBuilder
+    private var sourceDetailBadge: some View {
+        switch skill.source {
+        case .plugin(let pluginSource, let pluginName):
+            SkillMetaBadge(text: pluginSource)
+            SkillMetaBadge(text: pluginName)
+        default:
+            EmptyView()
+        }
+    }
+
+    @ViewBuilder
+    private var installStateBadge: some View {
+        switch skill.installState {
+        case .installed:
+            EmptyView()
+        case .trial:
+            SkillMetaBadge(text: "Trial", tint: .orange)
+        case .notInstalled:
+            SkillMetaBadge(text: "Not Installed")
+        }
     }
 }
 
@@ -252,12 +271,12 @@ private struct SkillActionButtons: View {
         HStack(spacing: 6) {
             switch skill.installState {
             case .notInstalled:
-                ActionButton(icon: "arrow.down.circle", label: "Install", action: onInstall)
+                TextActionButton(label: "Install", action: onInstall)
             case .installed:
-                ActionButton(icon: "trash", label: "Uninstall", action: onUninstall)
+                TextActionButton(label: "Uninstall", role: .destructive, action: onUninstall)
             case .trial:
-                ActionButton(icon: "arrow.down.circle", label: "Keep", action: onInstall)
-                ActionButton(icon: "xmark.circle", label: "Discard", action: onUninstall)
+                TextActionButton(label: "Keep", action: onInstall)
+                TextActionButton(label: "Discard", role: .destructive, action: onUninstall)
             }
 
             Menu {
@@ -266,59 +285,30 @@ private struct SkillActionButtons: View {
                 Divider()
                 Button("Copy Path") { }
             } label: {
-                Image(systemName: "ellipsis")
-                    .frame(width: 22, height: 22)
-                    .contentShape(Rectangle())
+                Text("More")
+                    .font(.caption)
             }
             .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .frame(width: 22, height: 22)
+            .buttonStyle(.bordered)
+            .controlSize(.small)
             .help("More")
         }
         .padding(.top, 2)
     }
 }
 
-private struct ActionButton: View {
-    let icon: String
+private struct TextActionButton: View {
     let label: String
+    var role: ButtonRole? = nil
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            Image(systemName: icon)
-                .frame(width: 22, height: 22)
+        Button(role: role, action: action) {
+            Text(label)
+                .font(.caption)
         }
-        .buttonStyle(.plain)
-        .foregroundStyle(.secondary)
-        .help(label)
-    }
-}
-
-// MARK: - Install state badge
-
-private struct InstallStateBadge: View {
-    let state: InstallState
-
-    var body: some View {
-        switch state {
-        case .installed:
-            EmptyView()
-        case .trial:
-            Text("Trial")
-                .font(.caption2)
-                .foregroundStyle(.orange)
-                .padding(.horizontal, 5)
-                .padding(.vertical, 2)
-                .background(.orange.opacity(0.1), in: Capsule())
-        case .notInstalled:
-            Text("Not Installed")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 5)
-                .padding(.vertical, 2)
-                .background(.secondary.opacity(0.1), in: Capsule())
-        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
     }
 }
 
