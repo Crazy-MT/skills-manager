@@ -37,6 +37,7 @@
 		94F47DEE84AF8AC4E88FEA03 /* SkillParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = E755FBEC77714122731E7A45 /* SkillParser.swift */; };
 		96428207D0C4C159CC581D38 /* LLMService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 522C4FF85D5865CEB9DEEF64 /* LLMService.swift */; };
 		969AE94BB0DE1FD72398A99D /* Markdown in Frameworks */ = {isa = PBXBuildFile; productRef = 112275252DEF9637B772525E /* Markdown */; };
+		96A7F7E13F4149B692B6F9A1 /* MarkdownView in Frameworks */ = {isa = PBXBuildFile; productRef = 96A7F7E23F4149B692B6F9A1 /* MarkdownView */; };
 		A22D268F985AF8E5CE19864E /* SkillsManagerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0525175ED2964BB6E2E0B1B0 /* SkillsManagerApp.swift */; };
 		A4031159D8844F05E8D8E9E6 /* SkillFormatConverter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FE67140FC42B93008948827 /* SkillFormatConverter.swift */; };
 		AF8A6D103405710E4EEAEEE3 /* NetworkSessionFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E3BEEF1839A714FE5E62EC5 /* NetworkSessionFactory.swift */; };
@@ -103,6 +104,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				969AE94BB0DE1FD72398A99D /* Markdown in Frameworks */,
+				96A7F7E13F4149B692B6F9A1 /* MarkdownView in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -224,6 +226,7 @@
 			name = SkillsManager;
 			packageProductDependencies = (
 				112275252DEF9637B772525E /* Markdown */,
+				96A7F7E23F4149B692B6F9A1 /* MarkdownView */,
 			);
 			productName = SkillsManager;
 			productReference = 71E86521947227FAD14E43AA /* SkillsManager.app */;
@@ -253,6 +256,7 @@
 			mainGroup = CC56A8FD91FC65855EEC6C19;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				96A7F7E03F4149B692B6F9A1 /* XCRemoteSwiftPackageReference "MarkdownView" */,
 				FCCF8DEBDCC1F6C6FC3CF62A /* XCRemoteSwiftPackageReference "swift-markdown" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -514,9 +518,17 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		96A7F7E03F4149B692B6F9A1 /* XCRemoteSwiftPackageReference "MarkdownView" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/LiYanan2004/MarkdownView";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.6.1;
+			};
+		};
 		FCCF8DEBDCC1F6C6FC3CF62A /* XCRemoteSwiftPackageReference "swift-markdown" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/apple/swift-markdown.git";
+			repositoryURL = "https://github.com/swiftlang/swift-markdown.git";
 			requirement = {
 				kind = upToNextMajorVersion;
 				minimumVersion = 0.4.0;
@@ -525,6 +537,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		96A7F7E23F4149B692B6F9A1 /* MarkdownView */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 96A7F7E03F4149B692B6F9A1 /* XCRemoteSwiftPackageReference "MarkdownView" */;
+			productName = MarkdownView;
+		};
 		112275252DEF9637B772525E /* Markdown */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = FCCF8DEBDCC1F6C6FC3CF62A /* XCRemoteSwiftPackageReference "swift-markdown" */;

@@ -8,13 +8,15 @@ let package = Package(
         .executable(name: "SkillsManager", targets: ["SkillsManager"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/apple/swift-markdown.git", from: "0.4.0"),
+        .package(url: "https://github.com/swiftlang/swift-markdown.git", from: "0.4.0"),
+        .package(url: "https://github.com/LiYanan2004/MarkdownView", from: "2.6.1"),
     ],
     targets: [
         .executableTarget(
             name: "SkillsManager",
             dependencies: [
                 .product(name: "Markdown", package: "swift-markdown"),
+                .product(name: "MarkdownView", package: "MarkdownView"),
             ],
             path: "SkillsManager"
         ),

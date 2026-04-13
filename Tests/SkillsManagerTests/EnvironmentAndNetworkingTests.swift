@@ -168,6 +168,31 @@ struct EnvironmentAndNetworkingTests {
         ))
         #expect(customCompatibleURL.absoluteString == "https://example.com/v1/chat/completions")
     }
+
+    @Test
+    func skillParserSeparatesFrontmatterFromMarkdownBody() {
+        let content = """
+        ---
+        name: seo-monitoring
+        description: Monitor SEO data and benchmarks.
+        metadata:
+          version: 1.0.0
+        ---
+
+        # SEO Monitoring
+
+        Track rankings and indexing over time.
+        """
+
+        let parsed = SkillParser.parse(content: content)
+
+        #expect(parsed.frontmatter["name"] == "seo-monitoring")
+        #expect(parsed.frontmatter["description"] == "Monitor SEO data and benchmarks.")
+        #expect(parsed.body.contains("# SEO Monitoring"))
+        #expect(parsed.body.contains("Track rankings and indexing over time."))
+        #expect(parsed.body.contains("name: seo-monitoring") == false)
+        #expect(parsed.body.contains("metadata:") == false)
+    }
 }
 
 private final class Locked<T>: @unchecked Sendable {

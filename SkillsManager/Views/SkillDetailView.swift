@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import MarkdownView
 
 struct SkillDetailView: View {
     let skill: Skill?
@@ -43,15 +44,20 @@ private struct DetailContent: View {
 
     @State private var showInstallToAgent = false
 
+    private var renderedMarkdownContent: String {
+        SkillParser.parse(content: skill.markdownContent)
+            .body
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 14) {
                 header
-                metaRow
-                actionRow
-                agentTags
-                Divider()
-                markdownBody
+                if !renderedMarkdownContent.isEmpty {
+                    Divider()
+                    markdownBody
+                }
             }
             .padding(20)
         }
@@ -63,12 +69,23 @@ private struct DetailContent: View {
     // MARK: Header
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(skill.displayName)
-                .font(.largeTitle)
-                .bold()
-                .textSelection(.enabled)
-            openInEditorButton
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 16) {
+                Text(skill.displayName)
+                    .font(.title2)
+                    .bold()
+                    .textSelection(.enabled)
+
+                Spacer(minLength: 12)
+
+                metaRow
+            }
+
+            if !skill.compatibleAgents.isEmpty {
+                agentInfoRow
+            }
+
+            actionRow
         }
     }
 
@@ -85,12 +102,13 @@ private struct DetailContent: View {
     // MARK: Meta row
 
     private var metaRow: some View {
-        HStack(spacing: 8) {
+        FlowLayout(hSpacing: 6, vSpacing: 6) {
             if let version = skill.version {
                 SkillMetaBadge(text: "v\(version)")
             }
             sourceBadge
         }
+        .frame(maxWidth: 180, alignment: .trailing)
     }
 
     private var sourceBadge: some View {
@@ -106,70 +124,79 @@ private struct DetailContent: View {
     }
 
     private var actionRow: some View {
-        HStack(spacing: 8) {
-            Button {
-                onToggleStar()
-            } label: {
-                Label(
-                    skill.isStarred ? "Unstar" : "Star",
-                    systemImage: skill.isStarred ? "star.fill" : "star"
-                )
-            }
-            .buttonStyle(.bordered)
-            .foregroundStyle(skill.isStarred ? .yellow : .secondary)
+        FlowLayout(hSpacing: 8, vSpacing: 8) {
+            openInEditorButton
+            starButton
 
             if case .projectLocal = skill.source {
-                Button {
-                    onPromote()
-                } label: {
-                    Label("Promote to Global", systemImage: "arrow.up.circle")
-                }
-                .buttonStyle(.bordered)
+                promoteButton
             }
 
-            Button {
-                showInstallToAgent = true
-            } label: {
-                Label("Install to Agent…", systemImage: "square.and.arrow.down.on.square")
-            }
-            .buttonStyle(.bordered)
+            installButton
         }
     }
 
-    // MARK: Agent tags
+    private var agentInfoRow: some View {
+        FlowLayout(hSpacing: 8, vSpacing: 8) {
+            agentPill
 
-    private var agentTags: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "cpu")
-                .font(.caption)
-                .foregroundStyle(.secondary)
             ForEach(skill.compatibleAgents, id: \.self) { agent in
                 SkillMetaBadge(text: agent)
             }
         }
     }
 
+    private var starButton: some View {
+        Button {
+            onToggleStar()
+        } label: {
+            Label(
+                skill.isStarred ? "Unstar" : "Star",
+                systemImage: skill.isStarred ? "star.fill" : "star"
+            )
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .foregroundStyle(skill.isStarred ? .yellow : .secondary)
+    }
+
+    private var promoteButton: some View {
+        Button {
+            onPromote()
+        } label: {
+            Label("Promote to Global", systemImage: "arrow.up.circle")
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+    }
+
+    private var installButton: some View {
+        Button {
+            showInstallToAgent = true
+        } label: {
+            Label("Install to Agent…", systemImage: "square.and.arrow.down.on.square")
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+    }
+
+    private var agentPill: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "cpu")
+                .font(.caption)
+            Text("Agents")
+                .font(.caption)
+        }
+        .foregroundStyle(.secondary)
+    }
+
     // MARK: Markdown body
 
     private var markdownBody: some View {
-        Group {
-            if let attributed = try? AttributedString(
-                markdown: skill.markdownContent,
-                options: AttributedString.MarkdownParsingOptions(
-                    interpretedSyntax: .inlineOnlyPreservingWhitespace
-                ),
-                baseURL: nil
-            ) {
-                Text(attributed)
-                    .textSelection(.enabled)
-            } else {
-                Text(skill.markdownContent)
-                    .textSelection(.enabled)
-            }
-        }
-        .font(.body)
+        MarkdownView(renderedMarkdownContent)
+            .textSelection(.enabled)
         .frame(maxWidth: .infinity, alignment: .leading)
-}
+    }
 }
 
 #if DEBUG

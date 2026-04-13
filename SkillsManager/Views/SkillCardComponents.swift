@@ -6,7 +6,7 @@ struct SkillMetaBadge: View {
 
     var body: some View {
         Text(text)
-            .font(.caption2)
+            .font(.caption)
             .foregroundStyle(tint)
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
@@ -26,7 +26,7 @@ struct SkillCard<Badges: View, Actions: View>: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .top, spacing: 8) {
                 Text(title)
-                    .font(.body)
+                    .font(.headline)
                     .bold()
                     .lineLimit(2)
                     .layoutPriority(1)
@@ -41,7 +41,7 @@ struct SkillCard<Badges: View, Actions: View>: View {
 
             if !description.isEmpty {
                 Text(description)
-                    .font(.caption)
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
             }
