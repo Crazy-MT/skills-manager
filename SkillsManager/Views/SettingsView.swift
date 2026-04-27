@@ -18,6 +18,8 @@ struct SettingsView: View {
     // LM Studio
     @AppStorage(AppSettings.lmStudioBaseURLKey)  private var lmURL         = ""
     @AppStorage(AppSettings.lmStudioModelKey)    private var lmModel       = AppSettings.defaultLMStudioModel
+    @AppStorage(AppSettings.descriptionLanguageModeKey) private var descriptionLanguageModeRaw = DescriptionLanguageMode.system.rawValue
+    @AppStorage(AppSettings.manualDescriptionLocaleKey) private var manualDescriptionLocale = AppSettings.descriptionLanguageOptions.first?.localeIdentifier ?? "en"
 
     private var provider: LLMProvider {
         LLMProvider(rawValue: providerRaw) ?? .claude
@@ -37,6 +39,8 @@ struct SettingsView: View {
                     .frame(width: 220)
                 }
             }
+
+            descriptionLanguageSection
 
             switch provider {
             case .claude:
@@ -59,6 +63,45 @@ struct SettingsView: View {
     }
 
     // MARK: - Provider sections
+
+    private var descriptionLanguageSection: some View {
+        Section("Description Language") {
+            LabeledContent("Mode") {
+                Picker("Mode", selection: $descriptionLanguageModeRaw) {
+                    ForEach(DescriptionLanguageMode.allCases, id: \.rawValue) { mode in
+                        Text(mode.displayName).tag(mode.rawValue)
+                    }
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .frame(width: 220)
+            }
+
+            if DescriptionLanguageMode(rawValue: descriptionLanguageModeRaw) == .manual {
+                LabeledContent("Language") {
+                    Picker("Language", selection: $manualDescriptionLocale) {
+                        ForEach(AppSettings.descriptionLanguageOptions) { option in
+                            Text(option.label).tag(option.localeIdentifier)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .labelsHidden()
+                    .frame(width: 220)
+                }
+                LabeledContent("") {
+                    Text("Pick the display language for translated skill descriptions.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 280, alignment: .leading)
+                }
+            } else {
+                LabeledContent("Language") {
+                    Text(Locale.autoupdatingCurrent.localizedString(forIdentifier: Locale.autoupdatingCurrent.identifier) ?? Locale.autoupdatingCurrent.identifier)
+                        .frame(width: 280)
+                }
+            }
+        }
+    }
 
     private var claudeSection: some View {
         Section("Claude API") {

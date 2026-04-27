@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { buildLocalizedDescription, resolveDescriptionLocale } from './DescriptionTranslationCache.js';
 const CACHE_DIR = path.join(os.homedir(), '.skills-manager', 'cache');
 const CACHE_FILE = path.join(CACHE_DIR, 'skills-directory.json');
 const CACHE_TTL_MS = 30 * 60 * 1000;
@@ -89,6 +90,8 @@ function buildDiscoverEntries(payloads) {
             installs: Number(payload.installs ?? 0),
             repoUrl: `https://github.com/${source}`,
             installCommand: `npx skills add https://github.com/${source} --skill ${skillId}`,
+            baseDescriptionLocale: 'en',
+            isDescriptionTranslated: false,
         });
     }
     return entries;
@@ -169,7 +172,27 @@ export async function fetchDiscoverSkillDetail(entry) {
     return {
         ...entry,
         installCommand: installMatch?.[1] ?? entry.installCommand,
-        summary: summaryBlock ? stripTags(summaryBlock[1]).slice(0, 900) : (extractFirstParagraph(readmeBlock?.[1]) ?? entry.summary),
+        ...buildSummaryState(entry.id, summaryBlock ? stripTags(summaryBlock[1]).slice(0, 900) : entry.baseDescription),
         readmeExcerpt: readmeBlock ? stripTags(readmeBlock[1]).slice(0, 1200) : entry.readmeExcerpt,
+    };
+}
+function buildSummaryState(skillID, baseDescription) {
+    const trimmed = baseDescription?.trim();
+    if (!trimmed) {
+        return {
+            baseDescription: undefined,
+            baseDescriptionLocale: 'en',
+            localizedDescription: undefined,
+            summary: undefined,
+            isDescriptionTranslated: false,
+        };
+    }
+    const localized = buildLocalizedDescription(skillID, trimmed, resolveDescriptionLocale(undefined, trimmed));
+    return {
+        baseDescription: localized.baseDescription,
+        baseDescriptionLocale: localized.baseDescriptionLocale,
+        localizedDescription: localized.localizedDescription,
+        summary: localized.description,
+        isDescriptionTranslated: localized.isDescriptionTranslated,
     };
 }

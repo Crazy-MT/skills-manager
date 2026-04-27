@@ -81,12 +81,35 @@ Blessed-based terminal UI is now considered complete for the current product sco
 
 ---
 
-## Phase 4 — PENDING
+## Discover and Translation Track ✅ COMPLETE (2026-04)
+
+Discovery now treats skills.sh as a searchable directory instead of only the visible homepage list.
+
+### Delivered
+- Full-site Discover search via the skills.sh API, so users can find skills outside the current loaded category/list
+- Local Discover directory cache at `~/.skills-manager/cache/discover-directory.json`
+- Cached lightweight index, category snapshots, search snapshots, and detail summaries/readmes
+- Cached startup path followed by background remote refresh
+- Bundled generated description translation catalog in `SkillsManager/Resources/description-translations.json`
+- On-demand translation fallback remains available for newly loaded or uncached summaries
+- Homepage skill summaries receive bounded background detail prewarm and translation
+- Ollama and LM Studio local provider URLs normalize `localhost` to `127.0.0.1` at runtime for both health checks and chat completions
+
+### Scope decision
+- Translation UX remains intentionally narrow: the built-in catalog is the primary path, while the manual translate button is a temporary catch-up mechanism for new or uncached data
+- Translation cache remains separate from the Discover directory cache
+- Broader diagnostics, alternate fallback behavior, and multi-language catalog generation remain future product work
+
+---
+
+## Phase 4 ✅ COMPLETE
 
 Multi-agent support per original spec:
-- `CursorAdapter` + skill format conversion (.mdc)
-- Project-local skills discovery and promotion to global
-- Other agent adapter extensions (Copilot CLI, Codex, Gemini CLI)
+- `AgentRegistry` knows 44 coding-agent definitions
+- Universal scanning merges canonical `~/.config/agents/skills` with installed agent-specific global directories
+- Multi-install picker currently targets Claude Code, Codex, Cursor, Gemini CLI, GitHub Copilot, Pi, Roo Code, Continue, Augment, Command Code, iFlow CLI, Kilo Code, Kiro CLI, MCPJam, Mux, Neovate, OpenHands, and Qwen Code
+- Project-local discovery supports `.cursor/rules/*.mdc` and `SKILL.md` files up to depth 3
+- Skill format conversion supports Cursor `.mdc` parsing for project-local rules
 
 ---
 
@@ -98,16 +121,19 @@ Models/
   Skill.swift                   — Skill struct + SkillRecord @Model + SkillSource + InstallState
   DiscoverSkill.swift           — DiscoverSkill model for skills.sh entries
   SidebarFilter.swift           — SidebarFilter enum (all/installed/starred/trial/agent/source/discover)
-  AppSettings.swift             — API key constants
+  AppSettings.swift             — API key constants, provider settings, translation defaults
   SandboxSlot.swift             — @Observable slot state for Try Sandbox
   Skill+Mock.swift              — #if DEBUG mock data for previews
 Adapters/
+  AgentRegistry.swift           — supported coding-agent registry and install target selection
   ClaudeCodeAdapter.swift       — scans ~/.claude/skills/ + plugins/
+  UniversalAdapter.swift        — scans canonical and installed agent skills directories
 Services/
   SkillStore.swift              — @Observable @MainActor central state
-  SkillsDirectoryService.swift  — skills.sh directory + detail loading
+  DiscoverDirectoryCache.swift  — local skills.sh index/search/detail cache
+  SkillsDirectoryService.swift  — skills.sh directory, full-site search, and detail loading
   InstallService.swift          — legacy file retained as a note; Discover installs now use `npx skills add ... --skill ...`
-  LLMService.swift              — Claude Messages API actor
+  LLMService.swift              — provider-agnostic LLM actor for sandbox and translation
   GitService.swift              — git log/diff/rollback via Process
   FileWatcher.swift             — FSEvents file change detection
   SkillParser.swift             — SKILL.md + YAML frontmatter parsing
@@ -118,6 +144,6 @@ Views/
   DiscoverView.swift            — skills.sh browse, search, source filter, shared detail column
   SkillDetailView.swift         — markdown preview, star, version history
   SandboxView.swift             — LLM sandbox with slot comparison
-  SettingsView.swift            — API key + model config
+  SettingsView.swift            — API key, provider, model, and translation config
   VersionHistoryView.swift      — git commit list + diff
 ```

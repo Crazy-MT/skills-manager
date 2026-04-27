@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import matter from 'gray-matter';
+import { buildLocalizedDescription, resolveDescriptionLocale } from './DescriptionTranslationCache.js';
 const HOME = os.homedir();
 const CLAUDE_SKILLS_DIR = path.join(HOME, '.claude', 'skills');
 const PI_AGENT_DIR = path.join(HOME, '.pi', 'agent');
@@ -118,10 +119,13 @@ function parseSkillFile(filePath, starredNames, overrides = {}) {
         const raw = fs.readFileSync(filePath, 'utf8');
         const { data, content } = matter(raw);
         const name = overrides.name ?? path.basename(path.dirname(filePath));
+        const baseDescription = data['description']?.trim() ?? '';
+        const baseDescriptionLocale = resolveDescriptionLocale(data, baseDescription);
+        const localized = buildLocalizedDescription(overrides.name ?? name, baseDescription, baseDescriptionLocale);
         return {
             name,
             displayName: data['name'] ?? name,
-            description: data['description'] ?? content.trimStart().slice(0, 100).trim(),
+            ...localized,
             filePath,
             source: 'local',
             resourceType: 'skill',
@@ -161,10 +165,12 @@ function parseExtensionFile(filePath, starredNames, overrides = {}) {
     try {
         const raw = fs.readFileSync(filePath, 'utf8');
         const name = overrides.name ?? inferExtensionName(filePath);
+        const baseDescription = overrides.description ?? inferExtensionDescription(raw, name);
+        const localized = buildLocalizedDescription(overrides.name ?? name, baseDescription, resolveDescriptionLocale(undefined, baseDescription));
         return {
             name,
             displayName: overrides.displayName ?? name,
-            description: overrides.description ?? inferExtensionDescription(raw, name),
+            ...localized,
             filePath,
             source: overrides.source ?? 'local',
             resourceType: 'extension',

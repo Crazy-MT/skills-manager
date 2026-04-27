@@ -4,19 +4,23 @@ import MarkdownView
 
 struct SkillDetailView: View {
     let skill: Skill?
+    var isTranslatingDescription = false
     var onToggleStar: () -> Void = {}
     var onPromote: (Skill) async -> Void = { _ in }
     var onInstallToAgent: (Skill, [String]) async -> Void = { _, _ in }
+    var onTranslate: (Skill) async -> Void = { _ in }
 
     var body: some View {
         Group {
             if let skill {
                 DetailContent(
                     skill: skill,
+                    isTranslatingDescription: isTranslatingDescription,
                     onToggleStar: onToggleStar,
                     // Fire-and-forget tasks: errors surface via SkillStore.errorMessage, not thrown here.
                     onPromote: { Task { await onPromote(skill) } },
-                    onInstallToAgent: { agentIDs in Task { await onInstallToAgent(skill, agentIDs) } }
+                    onInstallToAgent: { agentIDs in Task { await onInstallToAgent(skill, agentIDs) } },
+                    onTranslate: { Task { await onTranslate(skill) } }
                 )
             } else {
                 placeholder
@@ -38,9 +42,11 @@ struct SkillDetailView: View {
 
 private struct DetailContent: View {
     let skill: Skill
+    let isTranslatingDescription: Bool
     let onToggleStar: () -> Void
     let onPromote: () -> Void
     let onInstallToAgent: ([String]) -> Void
+    let onTranslate: () -> Void
 
     @State private var showInstallToAgent = false
 
@@ -85,6 +91,13 @@ private struct DetailContent: View {
                 agentInfoRow
             }
 
+            if !skill.description.isEmpty {
+                Text(skill.description)
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+
             actionRow
         }
     }
@@ -106,6 +119,9 @@ private struct DetailContent: View {
             if let version = skill.version {
                 SkillMetaBadge(text: "v\(version)")
             }
+            if skill.isDescriptionTranslated {
+                SkillMetaBadge(text: "Translated", tint: .blue)
+            }
             sourceBadge
         }
         .frame(maxWidth: 180, alignment: .trailing)
@@ -125,6 +141,7 @@ private struct DetailContent: View {
 
     private var actionRow: some View {
         FlowLayout(hSpacing: 8, vSpacing: 8) {
+            translateButton
             openInEditorButton
             starButton
 
@@ -134,6 +151,23 @@ private struct DetailContent: View {
 
             installButton
         }
+    }
+
+    private var translateButton: some View {
+        Button(action: onTranslate) {
+            if isTranslatingDescription {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    Text("Translating")
+                }
+            } else {
+                Label("Translate Missing", systemImage: "globe")
+            }
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .disabled(isTranslatingDescription || skill.baseDescription.isEmpty)
+        .help("Translate this description only when the bundled translation catalog does not cover it")
     }
 
     private var agentInfoRow: some View {

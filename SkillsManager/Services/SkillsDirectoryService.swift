@@ -6,6 +6,7 @@ import Foundation
 /// by the macOS Discover experience.
 actor SkillsDirectoryService {
     private let session: URLSession
+    private let searchResultLimit = 1000
 
     init(session: URLSession = NetworkSessionFactory.makeEphemeralSession()) {
         self.session = session
@@ -21,6 +22,29 @@ actor SkillsDirectoryService {
     func loadSkillsDirectory(category: DiscoverDirectoryCategory = .allTime) async throws -> (skills: [DiscoverSkill], total: Int) {
         let html = try await fetchHTML(at: category.url)
         return parseSkillsDirectoryHTML(html)
+    }
+
+    func searchSkills(query: String) async throws -> (skills: [DiscoverSkill], count: Int) {
+        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedQuery.isEmpty else {
+            return ([], 0)
+        }
+
+        var components = URLComponents(url: URL(string: "https://skills.sh/api/search")!, resolvingAgainstBaseURL: false)!
+        components.queryItems = [
+            URLQueryItem(name: "q", value: trimmedQuery),
+            URLQueryItem(name: "limit", value: String(searchResultLimit))
+        ]
+
+        guard let url = components.url else {
+            throw SkillsDirectoryError.fetchFailed("https://skills.sh/api/search")
+        }
+
+        let json = try await fetchJSON(at: url)
+        guard let payload = parseSkillsSearchPayload(json) else {
+            throw SkillsDirectoryError.fetchFailed(url.absoluteString)
+        }
+        return payload
     }
 
     func loadSkillDetail(_ skill: DiscoverSkill) async throws -> DiscoverSkill {
@@ -58,7 +82,9 @@ actor SkillsDirectoryService {
             installs: skill.installs,
             repoURL: skill.repoURL,
             installCommand: installCommand ?? skill.installCommand,
-            summary: summary,
+            baseDescription: summary,
+            baseDescriptionLocale: DescriptionLocale.descriptionLocale(description: summary ?? ""),
+            localizedDescription: nil,
             readmeExcerpt: readmeExcerpt
         )
     }
@@ -66,6 +92,17 @@ actor SkillsDirectoryService {
     private func fetchHTML(at url: URL) async throws -> String {
         var request = URLRequest(url: url)
         request.setValue("skills-manager-macos", forHTTPHeaderField: "User-Agent")
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw SkillsDirectoryError.fetchFailed(url.absoluteString)
+        }
+        return String(data: data, encoding: .utf8) ?? ""
+    }
+
+    private func fetchJSON(at url: URL) async throws -> String {
+        var request = URLRequest(url: url)
+        request.setValue("skills-manager-macos", forHTTPHeaderField: "User-Agent")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
         let (data, response) = try await session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
             throw SkillsDirectoryError.fetchFailed(url.absoluteString)
@@ -105,6 +142,21 @@ actor SkillsDirectoryService {
 
         let skills = buildDiscoverSkills(from: entries)
         return (skills, extractSkillsDirectoryTotal(html) ?? skills.count)
+    }
+
+    private func parseSkillsSearchPayload(_ json: String) -> (skills: [DiscoverSkill], count: Int)? {
+        struct SearchPayload: Decodable {
+            var skills: [DirectoryEntryPayload]
+            var count: Int
+        }
+
+        guard let data = json.data(using: .utf8),
+              let payload = try? JSONDecoder().decode(SearchPayload.self, from: data)
+        else {
+            return nil
+        }
+
+        return (buildDiscoverSkills(from: payload.skills), payload.count)
     }
 
     private func parseSkillsDirectoryMatches(_ html: String, pattern: String) -> [DirectoryEntryPayload] {
@@ -149,7 +201,9 @@ actor SkillsDirectoryService {
                 installs: entry.installs ?? 0,
                 repoURL: URL(string: "https://github.com/\(source)")!,
                 installCommand: "npx skills add https://github.com/\(source) --skill \(skillId)",
-                summary: nil,
+                baseDescription: nil,
+                baseDescriptionLocale: "en",
+                localizedDescription: nil,
                 readmeExcerpt: nil
             ))
         }

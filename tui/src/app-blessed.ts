@@ -33,6 +33,7 @@ let selectedIndex = 0
 let activePanel: 'sidebar' | 'list' | 'detail' = 'list'
 let discoverSourceFilter = 'all'
 let statusMessage = ''
+const actionBarHeight = 3
 
 // Create layout boxes
 const sidebar = blessed.box({
@@ -40,10 +41,10 @@ const sidebar = blessed.box({
   top: 0,
   left: 0,
   width: '20%',
-  height: '100%-1',
+  height: `100%-${actionBarHeight + 1}`,
   border: { type: 'line' },
   style: {
-    border: { fg: 'white' },
+    border: { fg: 'gray' },
   },
   tags: true,
   scrollable: true,
@@ -55,10 +56,10 @@ const list = blessed.list({
   top: 0,
   left: '20%',
   width: '40%',
-  height: '100%-1',
+  height: `100%-${actionBarHeight + 1}`,
   border: { type: 'line' },
   style: {
-    border: { fg: 'white' },
+    border: { fg: 'gray' },
     selected: { bg: 'blue', fg: 'white' },
   },
   tags: true,
@@ -83,10 +84,10 @@ const detail = blessed.box({
   top: 0,
   left: '60%',
   width: '40%',
-  height: '100%-1',
+  height: `100%-${actionBarHeight + 1}`,
   border: { type: 'line' },
   style: {
-    border: { fg: 'white' },
+    border: { fg: 'gray' },
   },
   tags: true,
   scrollable: true,
@@ -95,12 +96,25 @@ const detail = blessed.box({
   vi: true,
 })
 
+const actionBarDivider = blessed.box({
+  parent: screen,
+  bottom: actionBarHeight,
+  left: 0,
+  width: '100%',
+  height: 1,
+  tags: true,
+  style: {
+    bg: 'black',
+    fg: 'blue',
+  },
+})
+
 const statusBar = blessed.box({
   parent: screen,
   bottom: 0,
   left: 0,
   width: '100%',
-  height: 1,
+  height: actionBarHeight,
   style: {
     fg: 'white',
     bg: 'black',
@@ -261,6 +275,37 @@ function showSuccessStatus(message: string, timeout = 2000) {
   setTimeout(() => { statusMessage = ''; render() }, timeout)
 }
 
+function makeDivider(width: number, color = 'gray'): string {
+  return `{${color}-fg}${'─'.repeat(Math.max(8, width))}{/${color}-fg}`
+}
+
+function setPanelLabel(panel: blessed.Widgets.BoxElement | blessed.Widgets.ListElement, title: string, focused: boolean) {
+  const color = focused ? 'blue-fg' : 'white-fg'
+  panel.setLabel(` {bold}{${color}} ${escapeTags(title)} {/${color}}{/bold} `)
+}
+
+function updatePanelChrome() {
+  const sidebarFocused = activePanel === 'sidebar'
+  const listFocused = activePanel === 'list'
+  const detailFocused = activePanel === 'detail'
+
+  sidebar.style.border.fg = sidebarFocused ? 'blue' : 'gray'
+  list.style.border.fg = listFocused ? 'blue' : 'gray'
+  detail.style.border.fg = detailFocused ? 'blue' : 'gray'
+
+  setPanelLabel(sidebar, 'Sidebar', sidebarFocused)
+  setPanelLabel(
+    list,
+    sidebarSelection === 'library:discover' ? `Discover · ${discoverSourceFilter === 'all' ? 'All Sources' : discoverSourceFilter}` : 'Skills',
+    listFocused,
+  )
+
+  const detailTitle = sidebarSelection === 'library:discover'
+    ? 'Discover Detail'
+    : 'Skill Detail'
+  setPanelLabel(detail, detailTitle, detailFocused)
+}
+
 function fullRefresh() {
   statusMessage = 'Refreshing all...'
   discoverDetails = {}
@@ -379,11 +424,14 @@ function uninstallSelectedItem() {
 function updateSidebar() {
   const rows = getSidebarRows()
   const lines: string[] = []
+  const sidebarWidth = typeof sidebar.width === 'number' ? sidebar.width : Math.max(20, Math.floor(((screen.width as number) || 100) * 0.2))
+  const dividerWidth = Math.max(10, sidebarWidth - 8)
 
   const pushSection = (title: string, sectionRows: SidebarRow[]) => {
     if (sectionRows.length === 0) return
     if (lines.length > 0) lines.push('')
     lines.push(`{bold}${title}{/bold}`)
+    lines.push(makeDivider(dividerWidth, 'gray'))
     sectionRows.forEach(row => {
       const countText = ` (${row.count})`
       const maxLabelWidth = 16 - countText.length
@@ -400,7 +448,7 @@ function updateSidebar() {
   pushSection('Sources', rows.filter(row => row.key.startsWith('source:')))
 
   sidebar.setContent(lines.join('\n'))
-  sidebar.style.border.fg = activePanel === 'sidebar' ? 'blue' : 'white'
+  updatePanelChrome()
   screen.render()
 }
 
@@ -473,6 +521,7 @@ function updateList(resetSelection = false) {
     const sourceLabel = discoverSourceFilter === 'all' ? 'All sources' : discoverSourceFilter
     items = [
       `{bold}Discover{/bold} {gray-fg}· src: ${escapeTags(sourceLabel)}{/gray-fg}`,
+      `{gray-fg}${'─'.repeat(Math.max(12, getListInnerWidth()))}{/gray-fg}`,
       ...filteredDiscoverEntries.map(formatDiscoverListItem),
     ]
   } else {
@@ -485,7 +534,7 @@ function updateList(resetSelection = false) {
     const maxIndex = Math.max(0, filteredDiscoverEntries.length - 1)
     selectedIndex = Math.min(Math.max(selectedIndex, 0), maxIndex)
     list.select(filteredDiscoverEntries.length > 0 ? selectedIndex + 1 : 0)
-    list.style.border.fg = activePanel === 'list' ? 'blue' : 'white'
+    updatePanelChrome()
     screen.render()
     return
   }
@@ -494,7 +543,7 @@ function updateList(resetSelection = false) {
   selectedIndex = Math.min(Math.max(selectedIndex, 0), maxIndex)
   list.select(selectedIndex)
 
-  list.style.border.fg = activePanel === 'list' ? 'blue' : 'white'
+  updatePanelChrome()
   screen.render()
 }
 
@@ -512,12 +561,12 @@ function updateDetail() {
       const detailEntry = discoverDetails[entry.id] ?? entry
       content = `{bold}${detailEntry.name}{/bold}\n`
       content += `{cyan-fg}${detailEntry.source}{/cyan-fg}\n`
-      content += `${'─'.repeat(40)}\n`
+      content += `${makeDivider(44)}\n`
       content += `Installs: ${detailEntry.installs.toLocaleString()}\n`
       content += `Repo: ${detailEntry.repoUrl}\n`
 
       if (detailEntry.summary) {
-        content += `\n{bold}Summary{/bold}\n${detailEntry.summary}\n`
+        content += `\n{bold}Summary{/bold}\n${makeDivider(20)}\n${detailEntry.summary}\n`
       } else if (!discoverDetails[entry.id]) {
         content += `\n{gray-fg}Loading details...{/gray-fg}\n`
         // Async load details
@@ -534,10 +583,10 @@ function updateDetail() {
       }
 
       if (detailEntry.readmeExcerpt) {
-        content += `\n{bold}SKILL.md excerpt{/bold}\n${detailEntry.readmeExcerpt.slice(0, 500)}\n`
+        content += `\n{bold}SKILL.md excerpt{/bold}\n${makeDivider(28)}\n${detailEntry.readmeExcerpt.slice(0, 500)}\n`
       }
 
-      content += `\n{bold}Install command{/bold}\n${detailEntry.installCommand}\n`
+      content += `\n{bold}Install command{/bold}\n${makeDivider(26)}\n${detailEntry.installCommand}\n`
     }
   } else {
     const skill = filteredSkills[selectedIndex]
@@ -552,10 +601,10 @@ function updateDetail() {
 
       content = `{bold}${skill.displayName}{/bold}\n`
       content += `{cyan-fg}${sourceText}{/cyan-fg}\n`
-      content += `${'─'.repeat(40)}\n`
+      content += `${makeDivider(44)}\n`
       content += `${skill.description}\n`
-      content += `\n{bold}Type:{/bold} ${skill.resourceType === 'extension' ? 'Plugin' : 'Skill'}\n`
-      content += `\n{bold}Compatible:{/bold}\n`
+      content += `\n{bold}Type{/bold}\n${makeDivider(10)}\n${skill.resourceType === 'extension' ? 'Plugin' : 'Skill'}\n`
+      content += `\n{bold}Compatible{/bold}\n${makeDivider(16)}\n`
       skill.compatibleAgents.forEach(agent => {
         content += `{green-fg}✓{/green-fg} ${agent}\n`
       })
@@ -570,24 +619,29 @@ function updateDetail() {
   }
 
   detail.setContent(content)
-  detail.style.border.fg = activePanel === 'detail' ? 'blue' : 'white'
+  updatePanelChrome()
   screen.render()
 }
 
 function updateStatusBar() {
-  let text = 'h/l: panels  j/k: move  g/G: first/last  /: search  q: quit'
+  const screenWidth = typeof screen.width === 'number' ? screen.width : 100
+  const dividerLine = `{blue-fg}${'━'.repeat(Math.max(12, screenWidth))}{/blue-fg}`
+  const context = sidebarSelection === 'library:discover'
+    ? `Mode: Discover  Panel: ${activePanel}  Source: ${discoverSourceFilter}`
+    : `Mode: Skills  Panel: ${activePanel}  Filter: ${sidebarSelection.replace(':', ' · ')}`
+  const navigationLine = '{bold}h/l{/bold} panels  {bold}j/k{/bold} move  {bold}g/G{/bold} first/last  {bold}/{/bold} search  {bold}q{/bold} quit'
+  const actionLine = sidebarSelection === 'library:discover'
+    ? '{bold}i{/bold} install  {bold}x{/bold} uninstall  {bold}d{/bold} details  {bold}o{/bold} open local  {bold}O{/bold} source page  {bold}f/F{/bold} source  {bold}0{/bold} reset  {bold}r{/bold} sync  {bold}R{/bold} full refresh'
+    : '{bold}i{/bold} install  {bold}x{/bold} uninstall  {bold}s{/bold} star  {bold}o{/bold} open file  {bold}H{/bold} history  {bold}R{/bold} full refresh'
 
-  if (statusMessage) {
-    text = `{red-fg}${statusMessage}{/red-fg}`
-  } else if (activePanel === 'list' || activePanel === 'detail') {
-    if (sidebarSelection === 'library:discover') {
-      text += '  ·  i: install  x: uninstall  d: details  o: open file  O: source page  r: refresh dir  R: full refresh  f/F: Switch Source  0: Reset Source'
-    } else {
-      text += '  ·  i: install  x: uninstall  s: star  o: open file  H: history  R: full refresh'
-    }
-  }
+  const lines = [
+    statusMessage ? `{red-fg}${escapeTags(statusMessage)}{/red-fg}` : `{white-fg}${escapeTags(context)}{/white-fg}`,
+    navigationLine,
+    actionLine,
+  ]
 
-  statusBar.setContent(text)
+  actionBarDivider.setContent(dividerLine)
+  statusBar.setContent(lines.join('\n'))
   screen.render()
 }
 

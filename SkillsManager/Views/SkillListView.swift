@@ -202,6 +202,9 @@ private struct SkillRow: View {
             title: skill.displayName,
             description: skill.description
         ) {
+            if skill.isDescriptionTranslated {
+                SkillMetaBadge(text: "Translated", tint: .blue)
+            }
             if skill.isStarred {
                 SkillMetaBadge(text: "Starred", tint: .yellow)
             }

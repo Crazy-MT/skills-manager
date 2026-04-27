@@ -18,7 +18,14 @@ let package = Package(
                 .product(name: "Markdown", package: "swift-markdown"),
                 .product(name: "MarkdownView", package: "MarkdownView"),
             ],
-            path: "SkillsManager"
+            path: "SkillsManager",
+            exclude: [
+                "Assets.xcassets",
+                "Info.plist",
+            ],
+            resources: [
+                .process("Resources"),
+            ]
         ),
         .testTarget(
             name: "SkillsManagerTests",

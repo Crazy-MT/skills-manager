@@ -22,7 +22,9 @@ struct Skill: Identifiable, Hashable, Sendable {
     let id: String              // unique: "{source}:{name}"
     var name: String
     var displayName: String
-    var description: String
+    var baseDescription: String
+    var baseDescriptionLocale: String
+    var localizedDescription: String?
     var source: SkillSource
     var version: String?
     var filePath: URL           // primary file (SKILL.md)
@@ -38,6 +40,15 @@ struct Skill: Identifiable, Hashable, Sendable {
     // Merged from SkillRecord
     var isStarred: Bool = false
     var installState: InstallState = .installed
+
+    var description: String {
+        localizedDescription ?? baseDescription
+    }
+
+    var isDescriptionTranslated: Bool {
+        guard let localizedDescription else { return false }
+        return localizedDescription != baseDescription
+    }
 }
 
 enum SkillSource: Hashable, Codable, Sendable {

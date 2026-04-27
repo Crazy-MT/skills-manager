@@ -1,7 +1,11 @@
 export interface Skill {
   name: string
   displayName: string
+  baseDescription: string
+  baseDescriptionLocale: string
+  localizedDescription?: string
   description: string
+  isDescriptionTranslated: boolean
   filePath: string
   /** Directory containing the skill when it is folder-based (…/skill-name/SKILL.md). */
   directoryPath?: string
@@ -49,7 +53,11 @@ export interface DiscoverSkill {
   installs: number
   repoUrl: string
   installCommand: string
+  baseDescription?: string
+  baseDescriptionLocale: string
+  localizedDescription?: string
   summary?: string
+  isDescriptionTranslated: boolean
   readmeExcerpt?: string
 }
 

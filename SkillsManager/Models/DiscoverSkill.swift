@@ -9,8 +9,21 @@ struct DiscoverSkill: Identifiable, Sendable {
     var installs: Int
     var repoURL: URL
     var installCommand: String
-    var summary: String?
+    var baseDescription: String?
+    var baseDescriptionLocale: String = "en"
+    var localizedDescription: String?
     var readmeExcerpt: String?
+
+    var summary: String? {
+        let value = localizedDescription ?? baseDescription
+        guard let value, !value.isEmpty else { return nil }
+        return value
+    }
+
+    var isDescriptionTranslated: Bool {
+        guard let localizedDescription, let baseDescription else { return false }
+        return localizedDescription != baseDescription
+    }
 
     var detailURL: URL {
         URL(string: "https://skills.sh/\(source)/\(skillId)")!

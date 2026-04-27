@@ -5,7 +5,10 @@ import UniformTypeIdentifiers
 
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.locale) private var locale
     @Query private var skillRecords: [SkillRecord]
+    @AppStorage(AppSettings.descriptionLanguageModeKey) private var descriptionLanguageMode = DescriptionLanguageMode.system.rawValue
+    @AppStorage(AppSettings.manualDescriptionLocaleKey) private var manualDescriptionLocale = ""
 
     @State private var store = SkillStore()
     @State private var selectedFilter: SidebarFilter = .all
@@ -20,9 +23,29 @@ struct ContentView: View {
         store.discoverableSkills.map { store.discoverableSkillDetails[$0.id] ?? $0 }
     }
 
+    private var resolvedDiscoverSearchResults: [DiscoverSkill] {
+        store.discoverSearchResults.map { store.discoverableSkillDetails[$0.id] ?? $0 }
+    }
+
     private var selectedDiscoverSkill: DiscoverSkill? {
         guard let selectedDiscoverSkillID else { return nil }
-        return resolvedDiscoverSkills.first { $0.id == selectedDiscoverSkillID }
+        if let detail = store.discoverableSkillDetails[selectedDiscoverSkillID] {
+            return detail
+        }
+        return (resolvedDiscoverSkills + resolvedDiscoverSearchResults)
+            .first { $0.id == selectedDiscoverSkillID }
+    }
+
+    private var currentSelectedSkill: Skill? {
+        guard let selectedSkill else { return nil }
+        switch selectedFilter {
+        case .project:
+            return store.projectSkills.first { $0.id == selectedSkill.id } ?? selectedSkill
+        case .discover:
+            return selectedSkill
+        case .all, .installed, .starred, .trial, .agent, .source:
+            return store.skills.first { $0.id == selectedSkill.id } ?? selectedSkill
+        }
     }
 
     var body: some View {
@@ -41,6 +64,7 @@ struct ContentView: View {
                     installingSkillIDs: Set(store.discoverInstallActivities.compactMap { $0.status == .running ? $0.skillID : nil }),
                     selectedSkillID: $selectedDiscoverSkillID,
                     onSelectCategory: { category in await store.setDiscoverCategory(category) },
+                    onSearch: { query in try await store.searchDiscoverableSkillsDirectory(query: query) },
                     onLoadDetail: { entry in await store.loadDiscoverSkillDetail(entry) },
                     onTry: { entry in
                         await store.loadDiscoverSkillDetail(entry)
@@ -48,7 +72,8 @@ struct ContentView: View {
                     },
                     onInstall: { entry in pendingDiscoverInstallSkill = entry },
                     onUninstall: { entry in await store.uninstallDiscoverSkill(entry) },
-                    onRefresh: { await store.refreshDiscoverableSkillsDirectory() }
+                    onRefresh: { await store.refreshDiscoverableSkillsDirectory() },
+                    onTranslateLoaded: { await store.translateDescriptions(using: locale, scope: .loadedDiscoverDetails) }
                 )
             } else if selectedFilter == .project {
                 ProjectSkillsView(
@@ -76,19 +101,22 @@ struct ContentView: View {
                     } ?? false,
                     isInstalling: selectedDiscoverSkill.map { store.isInstallingDiscoverSkill($0) } ?? false,
                     installActivities: store.orderedDiscoverInstallActivities(prioritizing: selectedDiscoverSkillID),
+                    isTranslatingDescriptions: store.isTranslatingDescriptions,
                     onLoadDetail: { entry in await store.loadDiscoverSkillDetail(entry) },
                     onTry: { entry in
                         await store.loadDiscoverSkillDetail(entry)
                         pendingDiscoverTrySkill = store.discoverableSkillDetails[entry.id] ?? entry
                     },
                     onInstall: { entry in pendingDiscoverInstallSkill = entry },
-                    onUninstall: { entry in await store.uninstallDiscoverSkill(entry) }
+                    onUninstall: { entry in await store.uninstallDiscoverSkill(entry) },
+                    onTranslate: { entry in await store.translateDescriptions(using: locale, scope: .discoverSkill(id: entry.id)) }
                 )
             } else {
                 SkillDetailView(
-                    skill: selectedSkill,
+                    skill: currentSelectedSkill,
+                    isTranslatingDescription: store.isTranslatingDescriptions,
                     onToggleStar: {
-                        guard let skill = selectedSkill else { return }
+                        guard let skill = currentSelectedSkill else { return }
                         let skillID = skill.id
                         let descriptor = FetchDescriptor<SkillRecord>(
                             predicate: #Predicate { $0.skillID == skillID }
@@ -103,6 +131,15 @@ struct ContentView: View {
                     onPromote: { skill in await store.promoteSkill(skill) },
                     onInstallToAgent: { skill, agentIDs in
                         await store.installSkillToAgents(skill, agentIDs: agentIDs)
+                    },
+                    onTranslate: { skill in
+                        let scope: DescriptionTranslationScope
+                        if case .projectLocal = skill.source {
+                            scope = .projectSkill(id: skill.id)
+                        } else {
+                            scope = .skill(id: skill.id)
+                        }
+                        await store.translateDescriptions(using: locale, scope: scope)
                     }
                 )
             }
@@ -128,6 +165,15 @@ struct ContentView: View {
                 }
                 .help("Open a project folder to scan for local skills")
             }
+
+            ToolbarItem(placement: .automatic) {
+                if let summary = store.lastTranslationSummary {
+                    Text(summary.toolbarText)
+                        .font(.caption)
+                        .foregroundStyle(summary.failed > 0 ? .orange : .secondary)
+                        .help(summary.helpText)
+                }
+            }
         }
         .sheet(item: $pendingDiscoverInstallSkill) { skill in
             DiscoverInstallToAgentView(skill: skill) { agentIDs in
@@ -145,9 +191,28 @@ struct ContentView: View {
             async let discover: Void = store.reloadDiscoverableSkillsDirectory()
             _ = await (skills, discover)
             store.merge(records: skillRecords)
+            store.startDiscoverDirectoryRefreshLoop()
         }
         .onChange(of: skillRecords) {
             store.merge(records: skillRecords)
+        }
+        .onChange(of: descriptionLanguageMode) {
+            Task {
+                await store.refreshLocalizedDescriptions(using: locale)
+                store.startDiscoverHomeTranslationPrewarm(using: locale)
+            }
+        }
+        .onChange(of: manualDescriptionLocale) {
+            Task {
+                await store.refreshLocalizedDescriptions(using: locale)
+                store.startDiscoverHomeTranslationPrewarm(using: locale)
+            }
+        }
+        .onChange(of: locale.identifier) {
+            Task {
+                await store.refreshLocalizedDescriptions(using: locale)
+                store.startDiscoverHomeTranslationPrewarm(using: locale)
+            }
         }
         .alert("Error", isPresented: Binding(
             get: { store.errorMessage != nil },

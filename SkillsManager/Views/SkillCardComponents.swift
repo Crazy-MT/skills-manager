@@ -3,14 +3,19 @@ import SwiftUI
 struct SkillMetaBadge: View {
     let text: String
     var tint: Color = .secondary
+    var maxWidth: CGFloat?
 
     var body: some View {
         Text(text)
             .font(.caption)
+            .lineLimit(1)
+            .truncationMode(.middle)
             .foregroundStyle(tint)
+            .frame(maxWidth: maxWidth, alignment: .center)
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
             .background(tint.opacity(0.10), in: Capsule())
+            .help(text)
     }
 }
 
@@ -24,20 +29,16 @@ struct SkillCard<Badges: View, Actions: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .top, spacing: 8) {
-                Text(title)
-                    .font(.headline)
-                    .bold()
-                    .lineLimit(2)
-                    .layoutPriority(1)
+            Text(title)
+                .font(.headline)
+                .bold()
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
-                Spacer(minLength: 8)
-
-                HStack(spacing: 6) {
-                    badges
-                }
-                .frame(alignment: .trailing)
+            HStack(spacing: 6) {
+                badges
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             if !description.isEmpty {
                 Text(description)

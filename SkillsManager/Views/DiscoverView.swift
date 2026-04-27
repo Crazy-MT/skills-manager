@@ -10,32 +10,55 @@ struct DiscoverView: View {
     let installingSkillIDs: Set<String>
     @Binding var selectedSkillID: String?
     let onSelectCategory: (DiscoverDirectoryCategory) async -> Void
+    let onSearch: (String) async throws -> (skills: [DiscoverSkill], count: Int)
     let onLoadDetail: (DiscoverSkill) async -> Void
     let onTry: (DiscoverSkill) async -> Void
     let onInstall: (DiscoverSkill) async -> Void
     let onUninstall: (DiscoverSkill) async -> Void
     let onRefresh: () async -> Void
+    let onTranslateLoaded: () async -> Void
 
     @State private var searchText = ""
+    @State private var searchResults: [DiscoverSkill] = []
+    @State private var searchResultCount = 0
+    @State private var isSearching = false
+    @State private var searchErrorMessage: String?
     @State private var selectedSource: String?
     @State private var isSourceMenuHovered = false
 
+    private var activeSearchText: String {
+        searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var visibleSkills: [DiscoverSkill] {
+        activeSearchText.isEmpty ? skills : searchResults
+    }
+
+    private var visibleCount: Int {
+        activeSearchText.isEmpty ? totalCount : searchResultCount
+    }
+
     private var sourceCounts: [(source: String, count: Int)] {
-        Dictionary(grouping: skills, by: \.source)
+        Dictionary(grouping: visibleSkills, by: \.source)
             .map { ($0.key, $0.value.count) }
             .sorted { $0.source < $1.source }
     }
 
     private var filtered: [DiscoverSkill] {
-        skills.filter { skill in
-            let matchesSearch = searchText.isEmpty
-                || skill.name.localizedCaseInsensitiveContains(searchText)
-                || skill.skillId.localizedCaseInsensitiveContains(searchText)
-                || skill.source.localizedCaseInsensitiveContains(searchText)
-                || (skill.summary?.localizedCaseInsensitiveContains(searchText) ?? false)
+        visibleSkills.filter { skill in
             let matchesSource = selectedSource == nil || skill.source == selectedSource
-            return matchesSearch && matchesSource
+            return matchesSource
         }
+    }
+
+    private var emptyStateDescription: String {
+        if let searchErrorMessage, !activeSearchText.isEmpty {
+            return "Search failed: \(searchErrorMessage)"
+        }
+        if activeSearchText.isEmpty {
+            return "No discoverable skills loaded from skills.sh."
+        }
+        return "No skills match \"\(searchText)\"."
     }
 
     var body: some View {
@@ -60,9 +83,9 @@ struct DiscoverView: View {
                             selectedSource = nil
                         } label: {
                             if selectedSource == nil {
-                                Label("All Sources (\(totalCount))", systemImage: "checkmark")
+                                Label("All Sources (\(visibleCount))", systemImage: "checkmark")
                             } else {
-                                Text("All Sources (\(totalCount))")
+                                Text("All Sources (\(visibleCount))")
                             }
                         }
                         Divider()
@@ -107,18 +130,14 @@ struct DiscoverView: View {
             .padding(.vertical, 10)
             Divider()
 
-            if isLoading {
-                ProgressView("Loading skills.sh...")
+            if isLoading || isSearching {
+                ProgressView(isSearching ? "Searching skills.sh..." : "Loading skills.sh...")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if filtered.isEmpty {
                 ContentUnavailableView(
-                    searchText.isEmpty ? "No Skills" : "No Results",
+                    activeSearchText.isEmpty ? "No Skills" : "No Results",
                     systemImage: "magnifyingglass",
-                    description: Text(
-                        searchText.isEmpty
-                            ? "No discoverable skills loaded from skills.sh."
-                            : "No skills match \"\(searchText)\"."
-                    )
+                    description: Text(emptyStateDescription)
                 )
             } else {
                 List(selection: $selectedSkillID) {
@@ -139,14 +158,52 @@ struct DiscoverView: View {
                 .listStyle(.plain)
             }
         }
-        .searchable(text: $searchText, prompt: "Search skills.sh...")
+        .searchable(text: $searchText, prompt: "Search all skills.sh...")
         .navigationTitle("Discover")
         .onChange(of: filtered.map(\.id)) {
             if let selectedSkillID, !filtered.contains(where: { $0.id == selectedSkillID }) {
                 self.selectedSkillID = nil
             }
         }
+        .task(id: searchText) {
+            let query = activeSearchText
+            guard !query.isEmpty else {
+                searchResults = []
+                searchResultCount = 0
+                searchErrorMessage = nil
+                return
+            }
+
+            isSearching = true
+            defer { isSearching = false }
+
+            do {
+                try await Task.sleep(nanoseconds: 250_000_000)
+                guard !Task.isCancelled else { return }
+                let result = try await onSearch(query)
+                guard !Task.isCancelled else { return }
+                searchResults = result.skills
+                searchResultCount = result.count
+                searchErrorMessage = nil
+            } catch is CancellationError {
+                return
+            } catch {
+                searchResults = []
+                searchResultCount = 0
+                searchErrorMessage = error.localizedDescription
+            }
+        }
         .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    Task { await onTranslateLoaded() }
+                } label: {
+                    Label("Fill Missing Translations", systemImage: "globe")
+                }
+                .disabled(isLoading || skills.isEmpty)
+                .help("Fill gaps not covered by the bundled translation catalog")
+            }
+
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     Task { await onRefresh() }
@@ -178,11 +235,14 @@ private struct DiscoverSkillRow: View {
             title: entry.name,
             description: entry.summary ?? ""
         ) {
+            if entry.isDescriptionTranslated {
+                SkillMetaBadge(text: "Translated", tint: .blue)
+            }
             if isInstalled {
                 SkillMetaBadge(text: "Installed", tint: .green)
             }
-            SkillMetaBadge(text: entry.source)
-            SkillMetaBadge(text: "\(entry.installs.formatted()) installs")
+            SkillMetaBadge(text: sourceLabel, maxWidth: 96)
+            SkillMetaBadge(text: compactInstalls, maxWidth: 84)
         } actions: {
             HStack(spacing: 8) {
                 Button(isInstalled ? "Try Again" : "Try", action: onTry)
@@ -217,6 +277,23 @@ private struct DiscoverSkillRow: View {
             }
         }
     }
+
+    private var sourceLabel: String {
+        entry.source.split(separator: "/").last.map(String.init) ?? entry.source
+    }
+
+    private var compactInstalls: String {
+        switch entry.installs {
+        case 1_000_000...:
+            let value = Double(entry.installs) / 1_000_000
+            return "\(value.formatted(.number.precision(.fractionLength(value >= 10 ? 0 : 1))))M installs"
+        case 1_000...:
+            let value = Double(entry.installs) / 1_000
+            return "\(value.formatted(.number.precision(.fractionLength(value >= 100 ? 0 : 1))))K installs"
+        default:
+            return "\(entry.installs.formatted()) installs"
+        }
+    }
 }
 
 struct DiscoverDetailView: View {
@@ -224,10 +301,12 @@ struct DiscoverDetailView: View {
     let isInstalled: Bool
     let isInstalling: Bool
     let installActivities: [DiscoverInstallActivity]
+    let isTranslatingDescriptions: Bool
     let onLoadDetail: (DiscoverSkill) async -> Void
     let onTry: (DiscoverSkill) async -> Void
     let onInstall: (DiscoverSkill) async -> Void
     let onUninstall: (DiscoverSkill) async -> Void
+    let onTranslate: (DiscoverSkill) async -> Void
 
     var body: some View {
         Group {
@@ -237,9 +316,11 @@ struct DiscoverDetailView: View {
                     isInstalled: isInstalled,
                     isInstalling: isInstalling,
                     installActivities: installActivities,
+                    isTranslatingDescriptions: isTranslatingDescriptions,
                     onTry: { Task { await onTry(entry) } },
                     onInstall: { Task { await onInstall(entry) } },
-                    onUninstall: { Task { await onUninstall(entry) } }
+                    onUninstall: { Task { await onUninstall(entry) } },
+                    onTranslate: { Task { await onTranslate(entry) } }
                 )
                 .task(id: entry.id) {
                     if entry.summary == nil || entry.readmeExcerpt == nil {
@@ -268,16 +349,18 @@ private struct DiscoverDetailContent: View {
     let isInstalled: Bool
     let isInstalling: Bool
     let installActivities: [DiscoverInstallActivity]
+    let isTranslatingDescriptions: Bool
     let onTry: () -> Void
     let onInstall: () -> Void
     let onUninstall: () -> Void
+    let onTranslate: () -> Void
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(entry.name)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(entry.name)
                             .font(.largeTitle)
                             .fontWeight(.bold)
                             .textSelection(.enabled)
@@ -288,6 +371,20 @@ private struct DiscoverDetailContent: View {
                     }
                     Spacer()
                     HStack(spacing: 10) {
+                        Button(action: onTranslate) {
+                            if isTranslatingDescriptions {
+                                HStack(spacing: 8) {
+                                    ProgressView().controlSize(.small)
+                                    Text("Translating")
+                                }
+                            } else {
+                                Label("Translate Missing", systemImage: "globe")
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(isTranslatingDescriptions || entry.summary == nil)
+                        .help("Translate this summary only when the bundled translation catalog does not cover it")
+
                         Button(isInstalled ? "Try Again" : "Try Skill", action: onTry)
                             .buttonStyle(.bordered)
 
@@ -314,6 +411,9 @@ private struct DiscoverDetailContent: View {
 
                 HStack(spacing: 8) {
                     detailBadge("skills.sh")
+                    if entry.isDescriptionTranslated {
+                        detailBadge("Translated", tint: .blue)
+                    }
                     detailBadge("\(entry.installs.formatted()) installs")
                     detailBadge(entry.skillId)
                 }
@@ -370,13 +470,13 @@ private struct DiscoverDetailContent: View {
         }
     }
 
-    private func detailBadge(_ text: String) -> some View {
+    private func detailBadge(_ text: String, tint: Color = .secondary) -> some View {
         Text(text)
             .font(.caption)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(tint)
             .padding(.horizontal, 6)
             .padding(.vertical, 3)
-            .background(.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 4))
+            .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 4))
     }
 
     private func detailSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
@@ -505,7 +605,9 @@ private struct CategoryChip: View {
                 installs: 261141,
                 repoURL: URL(string: "https://github.com/vercel-labs/agent-skills")!,
                 installCommand: "npx skills add https://github.com/vercel-labs/agent-skills --skill vercel-react-best-practices",
-                summary: nil,
+                baseDescription: nil,
+                baseDescriptionLocale: "en",
+                localizedDescription: nil,
                 readmeExcerpt: nil
             )
         ],
@@ -516,11 +618,13 @@ private struct CategoryChip: View {
         installingSkillIDs: [],
         selectedSkillID: .constant(nil),
         onSelectCategory: { _ in },
+        onSearch: { _ in (skills: [], count: 0) },
         onLoadDetail: { _ in },
         onTry: { _ in },
         onInstall: { _ in },
         onUninstall: { _ in },
-        onRefresh: {}
+        onRefresh: {},
+        onTranslateLoaded: {}
     )
     .frame(width: 700, height: 600)
 }
