@@ -57,6 +57,7 @@ enum SkillSource: Hashable, Codable, Sendable {
     case plugin(pluginSource: String, pluginName: String)  // scanned from local plugin cache
     case symlinked       // symlinked from another location
     case projectLocal(projectURL: URL)
+    case projectLinked(projectURL: URL)  // symlinked from source repo into project's .agents/skills/
 }
 
 enum InstallState: String, Codable, CaseIterable, Sendable {

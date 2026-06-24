@@ -188,6 +188,7 @@ final class SkillStore {
     var discoverCategory: DiscoverDirectoryCategory = .allTime
     var discoverInstallActivities: [DiscoverInstallActivity] = []
     var projectSkills: [Skill] = []
+    var linkedProjectSkills: [Skill] = []
     var currentProjectURL: URL?
     var isLoading = false
     var isLoadingDiscover = false
@@ -568,6 +569,15 @@ final class SkillStore {
         case .projectLocal:
             // Project-local skills are not managed here; use Promote instead
             return
+        case .projectLinked:
+            // Remove the symlink in .agents/skills/ but leave the source intact
+            if let projectURL = currentProjectURL {
+                do {
+                    try ProjectSymlinkService.unlinkSkill(named: skill.name, from: projectURL)
+                } catch {
+                    errorMessage = error.localizedDescription
+                }
+            }
         }
 
         // Remove from memory immediately — row disappears without a reload
@@ -608,16 +618,19 @@ final class SkillStore {
     func loadProjectSkills() async {
         guard let projectURL = currentProjectURL else {
             projectSkills = []
+            linkedProjectSkills = []
             return
         }
         isLoadingProject = true
         defer { isLoadingProject = false }
-        // Run filesystem scan on a background thread to avoid blocking the MainActor.
-        // Skill is Sendable so the result crosses the actor boundary safely.
         let results = await Task.detached(priority: .userInitiated) {
-            ProjectScanner().scan(projectURL: projectURL)
+            let scanner = ProjectScanner()
+            let locals = scanner.scan(projectURL: projectURL)
+            let linked = scanner.scanLinkedSkills(projectURL: projectURL)
+            return (locals, linked)
         }.value
-        projectSkills = await localizeSkills(results)
+        projectSkills = await localizeSkills(results.0)
+        linkedProjectSkills = await localizeSkills(results.1)
         if hasRequestedDescriptionTranslation {
             _ = await translateMissingProjectDescriptions()
         }
@@ -653,6 +666,60 @@ final class SkillStore {
         }
     }
 
+    // MARK: - Project symlink management
+
+    func scanSourceSkills() -> [SourceSkill] {
+        ProjectSymlinkService.scanSourceSkills()
+    }
+
+    func linkSkillToProject(_ sourceSkill: SourceSkill) async {
+        guard let projectURL = currentProjectURL else { return }
+        do {
+            let safe = SymlinkInstaller.sanitize(sourceSkill.name)
+            try ProjectSymlinkService.linkSkill(named: safe, from: sourceSkill.sourceDirectory, to: projectURL)
+            if !ProjectSymlinkService.entryPointExists(in: projectURL) {
+                try ProjectSymlinkService.createEntryPoint(in: projectURL)
+            }
+            await loadProjectSkills()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func unlinkSkillFromProject(_ skill: Skill) async {
+        guard case .projectLinked(let projectURL) = skill.source else { return }
+        do {
+            try ProjectSymlinkService.unlinkSkill(named: skill.name, from: projectURL)
+            await loadProjectSkills()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func createEntryPoint() async {
+        guard let projectURL = currentProjectURL else { return }
+        do {
+            try ProjectSymlinkService.createEntryPoint(in: projectURL)
+            await loadProjectSkills()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func removeEntryPoint() async {
+        guard let projectURL = currentProjectURL else { return }
+        do {
+            try ProjectSymlinkService.removeEntryPoint(in: projectURL)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func entryPointExists() -> Bool {
+        guard let projectURL = currentProjectURL else { return false }
+        return ProjectSymlinkService.entryPointExists(in: projectURL)
+    }
+
     private func upsertDiscoverInstallActivity(_ activity: DiscoverInstallActivity) {
         discoverInstallActivities.removeAll { $0.id == activity.id }
         discoverInstallActivities.insert(activity, at: 0)
@@ -681,6 +748,7 @@ final class SkillStore {
     func refreshLocalizedDescriptions(using locale: Locale = .autoupdatingCurrent) async {
         skills = await localizeSkills(skills, locale: locale)
         projectSkills = await localizeSkills(projectSkills, locale: locale)
+        linkedProjectSkills = await localizeSkills(linkedProjectSkills, locale: locale)
         discoverableSkills = await localizeDiscoverSkills(discoverableSkills, locale: locale)
         discoverSearchResults = await localizeDiscoverSkills(discoverSearchResults, locale: locale)
 
@@ -934,15 +1002,55 @@ final class SkillStore {
                 return summary
             }
         }
+        for index in linkedProjectSkills.indices {
+            guard linkedProjectSkills[index].localizedDescription == nil else {
+                summary.recordSkip(.alreadyTranslated)
+                continue
+            }
+            guard !linkedProjectSkills[index].baseDescription.isEmpty else {
+                summary.recordSkip(.missingBaseDescription)
+                continue
+            }
+            let attempt = await descriptionLocalizer.translationAttempt(
+                skillID: linkedProjectSkills[index].id,
+                baseDescription: linkedProjectSkills[index].baseDescription,
+                baseDescriptionLocale: linkedProjectSkills[index].baseDescriptionLocale,
+                locale: locale,
+                config: config
+            )
+            switch attempt {
+            case .translated(let translated):
+                linkedProjectSkills[index].localizedDescription = translated == linkedProjectSkills[index].baseDescription ? nil : translated
+                if linkedProjectSkills[index].localizedDescription == nil {
+                    summary.recordSkip(.unchanged)
+                } else {
+                    summary.recordTranslation()
+                }
+            case .skipped(let reason):
+                summary.recordSkip(reason)
+            case .failed(let reason):
+                summary.recordFailure(reason)
+                logTranslationFailure(kind: "project", skillID: linkedProjectSkills[index].id, reason: reason)
+                return summary
+            }
+        }
         return summary
     }
 
     private func translateMissingProjectDescription(id: String, locale: Locale = .autoupdatingCurrent) async -> DescriptionTranslationSummary {
-        guard let index = projectSkills.firstIndex(where: { $0.id == id }) else { return DescriptionTranslationSummary() }
-        let config = AppSettings.currentLLMConfig()
-        var summary = DescriptionTranslationSummary()
-        await translateProjectDescription(at: index, locale: locale, config: config, summary: &summary)
-        return summary
+        if let index = projectSkills.firstIndex(where: { $0.id == id }) {
+            let config = AppSettings.currentLLMConfig()
+            var summary = DescriptionTranslationSummary()
+            await translateProjectDescription(at: index, locale: locale, config: config, summary: &summary)
+            return summary
+        }
+        if let index = linkedProjectSkills.firstIndex(where: { $0.id == id }) {
+            let config = AppSettings.currentLLMConfig()
+            var summary = DescriptionTranslationSummary()
+            await translateLinkedProjectDescription(at: index, locale: locale, config: config, summary: &summary)
+            return summary
+        }
+        return DescriptionTranslationSummary()
     }
 
     private func translateProjectDescription(
@@ -979,6 +1087,43 @@ final class SkillStore {
         case .failed(let reason):
             summary.recordFailure(reason)
             logTranslationFailure(kind: "project", skillID: projectSkills[index].id, reason: reason)
+        }
+    }
+
+    private func translateLinkedProjectDescription(
+        at index: Array<Skill>.Index,
+        locale: Locale,
+        config: LLMConfig,
+        summary: inout DescriptionTranslationSummary
+    ) async {
+        guard linkedProjectSkills[index].localizedDescription == nil else {
+            summary.recordSkip(.alreadyTranslated)
+            return
+        }
+        guard !linkedProjectSkills[index].baseDescription.isEmpty else {
+            summary.recordSkip(.missingBaseDescription)
+            return
+        }
+        let attempt = await descriptionLocalizer.translationAttempt(
+            skillID: linkedProjectSkills[index].id,
+            baseDescription: linkedProjectSkills[index].baseDescription,
+            baseDescriptionLocale: linkedProjectSkills[index].baseDescriptionLocale,
+            locale: locale,
+            config: config
+        )
+        switch attempt {
+        case .translated(let translated):
+            linkedProjectSkills[index].localizedDescription = translated == linkedProjectSkills[index].baseDescription ? nil : translated
+            if linkedProjectSkills[index].localizedDescription == nil {
+                summary.recordSkip(.unchanged)
+            } else {
+                summary.recordTranslation()
+            }
+        case .skipped(let reason):
+            summary.recordSkip(reason)
+        case .failed(let reason):
+            summary.recordFailure(reason)
+            logTranslationFailure(kind: "project", skillID: linkedProjectSkills[index].id, reason: reason)
         }
     }
 

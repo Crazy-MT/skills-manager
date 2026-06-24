@@ -15,11 +15,77 @@ struct ProjectScanner {
         // SKILL.md anywhere in the project (depth ≤ 3)
         let skillMDFiles = findSKILLMD(in: projectURL, depth: 0, maxDepth: 3)
         let claudeSkills = skillMDFiles.compactMap {
-            buildClaudeSkill(skillFile: $0, projectURL: projectURL)
+            buildSkill(skillFile: $0, projectURL: projectURL, source: .projectLocal(projectURL: projectURL))
         }
         skills.append(contentsOf: claudeSkills)
 
         return skills
+    }
+
+    /// Scans `.agents/skills/` for symlinked skill directories and builds Skill structs
+    /// with `.projectLinked` source.
+    func scanLinkedSkills(projectURL: URL) -> [Skill] {
+        let agentsDir = projectURL.appendingPathComponent(".agents/skills")
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: agentsDir.path) else { return [] }
+        guard let entries = try? fm.contentsOfDirectory(
+            at: agentsDir,
+            includingPropertiesForKeys: [.isSymbolicLinkKey],
+            options: [.skipsHiddenFiles]
+        ) else { return [] }
+
+        return entries.compactMap { entry -> Skill? in
+            // Resolve symlink to find the real SKILL.md
+            guard let dest = try? fm.destinationOfSymbolicLink(atPath: entry.path) else { return nil }
+            let resolvedDir: URL
+            if dest.hasPrefix("/") {
+                resolvedDir = URL(fileURLWithPath: dest)
+            } else {
+                resolvedDir = entry.deletingLastPathComponent().appendingPathComponent(dest)
+            }
+
+            var isDir: ObjCBool = false
+            guard fm.fileExists(atPath: resolvedDir.path, isDirectory: &isDir), isDir.boolValue else { return nil }
+
+            let skillFile = resolvedDir.appendingPathComponent("SKILL.md")
+            guard fm.fileExists(atPath: skillFile.path) else { return nil }
+
+            return buildLinkedSkill(skillFile: skillFile, skillName: entry.lastPathComponent, resolvedDir: resolvedDir, projectURL: projectURL)
+        }
+    }
+
+    private func buildLinkedSkill(skillFile: URL, skillName: String, resolvedDir: URL, projectURL: URL) -> Skill? {
+        guard let content = try? String(contentsOf: skillFile, encoding: .utf8) else { return nil }
+        let parsed = SkillParser.parse(content: content)
+        let fm = parsed.frontmatter
+
+        let displayName = fm["name"] ?? skillName
+        let description = fm["description"] ?? ""
+        let rawTags = fm["tags"] ?? fm["keywords"] ?? ""
+        let tags = rawTags
+            .components(separatedBy: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        let agents = fm["compatible_agents"]
+            .map { $0.components(separatedBy: ",").map { $0.trimmingCharacters(in: .whitespaces) } }
+            ?? ["Claude Code"]
+
+        return Skill(
+            id: "project-linked:\(projectURL.lastPathComponent):\(skillName)",
+            name: skillName,
+            displayName: displayName,
+            baseDescription: description,
+            baseDescriptionLocale: DescriptionLocale.descriptionLocale(frontmatter: fm, description: description),
+            localizedDescription: nil,
+            source: .projectLinked(projectURL: projectURL),
+            version: fm["version"],
+            filePath: skillFile,
+            directoryPath: resolvedDir,
+            compatibleAgents: agents,
+            tags: tags,
+            markdownContent: content,
+            frontmatter: fm
+        )
     }
 
     // MARK: - Private
@@ -82,18 +148,15 @@ struct ProjectScanner {
         return results
     }
 
-    private func buildClaudeSkill(skillFile: URL, projectURL: URL) -> Skill? {
+    private func buildSkill(skillFile: URL, projectURL: URL, source: SkillSource) -> Skill? {
         guard let content = try? String(contentsOf: skillFile, encoding: .utf8) else { return nil }
         let parsed = SkillParser.parse(content: content)
         let fm = parsed.frontmatter
-        // Derive a stable skill id segment from the path relative to the project root.
-        // Using the full relative path (e.g. "src/utils") prevents collisions between
-        // two SKILL.md files that share the same immediate parent directory name.
+
         let skillDirPath = skillFile.deletingLastPathComponent().standardized.path
         let projectPath = projectURL.standardized.path
         let dirName: String
         if skillDirPath == projectPath {
-            // SKILL.md is in the project root — use "root" as the skill name segment
             dirName = "root"
         } else if skillDirPath.hasPrefix(projectPath + "/") {
             dirName = String(skillDirPath.dropFirst(projectPath.count + 1))
@@ -107,8 +170,6 @@ struct ProjectScanner {
             .components(separatedBy: ",")
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
-        // Unlike ClaudeCodeAdapter (which hardcodes ["Claude Code"]), project-local skills
-        // respect their frontmatter's compatible_agents, since they may target multiple agents.
         let agents = fm["compatible_agents"]
             .map { $0.components(separatedBy: ",").map { $0.trimmingCharacters(in: .whitespaces) } }
             ?? ["Claude Code"]
@@ -120,7 +181,7 @@ struct ProjectScanner {
             baseDescription: description,
             baseDescriptionLocale: DescriptionLocale.descriptionLocale(frontmatter: fm, description: description),
             localizedDescription: nil,
-            source: .projectLocal(projectURL: projectURL),
+            source: source,
             version: fm["version"],
             filePath: skillFile,
             directoryPath: skillFile.deletingLastPathComponent(),

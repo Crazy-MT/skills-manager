@@ -18,6 +18,7 @@ struct ContentView: View {
     @State private var pendingDiscoverInstallSkill: DiscoverSkill? = nil
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var isProjectPickerPresented = false
+    @State private var showLinkSkillSheet = false
 
     private var resolvedDiscoverSkills: [DiscoverSkill] {
         store.discoverableSkills.map { store.discoverableSkillDetails[$0.id] ?? $0 }
@@ -40,7 +41,9 @@ struct ContentView: View {
         guard let selectedSkill else { return nil }
         switch selectedFilter {
         case .project:
-            return store.projectSkills.first { $0.id == selectedSkill.id } ?? selectedSkill
+            return store.projectSkills.first { $0.id == selectedSkill.id }
+                ?? store.linkedProjectSkills.first { $0.id == selectedSkill.id }
+                ?? selectedSkill
         case .discover:
             return selectedSkill
         case .all, .installed, .starred, .trial, .agent, .source:
@@ -50,7 +53,7 @@ struct ContentView: View {
 
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
-            SidebarView(selectedFilter: $selectedFilter, skills: store.skills, discoverableCount: store.discoverableSkillTotal, projectSkillCount: store.projectSkills.count, currentProjectURL: store.currentProjectURL)
+            SidebarView(selectedFilter: $selectedFilter, skills: store.skills, discoverableCount: store.discoverableSkillTotal, projectSkillCount: store.projectSkills.count + store.linkedProjectSkills.count, currentProjectURL: store.currentProjectURL)
                 .navigationSplitViewColumnWidth(min: 200, ideal: 220)
         } content: {
             if selectedFilter == .discover {
@@ -78,10 +81,16 @@ struct ContentView: View {
             } else if selectedFilter == .project {
                 ProjectSkillsView(
                     projectURL: store.currentProjectURL,
-                    skills: store.projectSkills,
+                    projectSkills: store.projectSkills,
+                    linkedSkills: store.linkedProjectSkills,
+                    entryPointExists: store.entryPointExists(),
                     isLoading: store.isLoadingProject,
                     selectedSkill: $selectedSkill,
-                    onPromote: { skill in await store.promoteSkill(skill) }
+                    onPromote: { skill in await store.promoteSkill(skill) },
+                    onLinkSkill: { showLinkSkillSheet = true },
+                    onUnlinkSkill: { skill in await store.unlinkSkillFromProject(skill) },
+                    onCreateEntryPoint: { await store.createEntryPoint() },
+                    onRemoveEntryPoint: { await store.removeEntryPoint() }
                 )
             } else {
                 SkillListView(
@@ -129,6 +138,7 @@ struct ContentView: View {
                         }
                     },
                     onPromote: { skill in await store.promoteSkill(skill) },
+                    onUnlinkFromProject: { skill in await store.unlinkSkillFromProject(skill) },
                     onInstallToAgent: { skill, agentIDs in
                         await store.installSkillToAgents(skill, agentIDs: agentIDs)
                     },
@@ -185,6 +195,16 @@ struct ContentView: View {
                 pendingDiscoverTrySkill = nil
                 pendingDiscoverInstallSkill = skill
             }
+        }
+        .sheet(isPresented: $showLinkSkillSheet) {
+            LinkSkillView(
+                projectURL: store.currentProjectURL ?? URL(fileURLWithPath: "/"),
+                alreadyLinkedNames: Set(store.linkedProjectSkills.map { $0.name }),
+                onLink: { sourceSkill in
+                    await store.linkSkillToProject(sourceSkill)
+                },
+                onDismiss: { showLinkSkillSheet = false }
+            )
         }
         .task {
             async let skills: Void = store.reloadSkills()

@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct SettingsView: View {
     @AppStorage(AppSettings.llmProviderKey)      private var providerRaw   = LLMProvider.claude.rawValue
@@ -20,6 +21,9 @@ struct SettingsView: View {
     @AppStorage(AppSettings.lmStudioModelKey)    private var lmModel       = AppSettings.defaultLMStudioModel
     @AppStorage(AppSettings.descriptionLanguageModeKey) private var descriptionLanguageModeRaw = DescriptionLanguageMode.system.rawValue
     @AppStorage(AppSettings.manualDescriptionLocaleKey) private var manualDescriptionLocale = AppSettings.descriptionLanguageOptions.first?.localeIdentifier ?? "en"
+    @AppStorage(AppSettings.skillSourceDirectoriesKey) private var sourceDirectoriesRaw = ""
+
+    @State private var sourceDirectories: [URL] = []
 
     private var provider: LLMProvider {
         LLMProvider(rawValue: providerRaw) ?? .claude
@@ -54,12 +58,17 @@ struct SettingsView: View {
             case .lmStudio:
                 lmStudioSection
             }
+
+            skillSourceDirectoriesSection
         }
         .formStyle(.grouped)
         .frame(width: 500)
         .padding()
         .navigationTitle("Settings")
         .animation(.default, value: providerRaw)
+        .onAppear {
+            loadSourceDirectories()
+        }
     }
 
     // MARK: - Provider sections
@@ -196,6 +205,66 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+        }
+    }
+
+    // MARK: - Skill source directories
+
+    private var skillSourceDirectoriesSection: some View {
+        Section("Skill Source Directories") {
+            if sourceDirectories.isEmpty {
+                LabeledContent("") {
+                    Text("No source directories configured. Add directories containing skill repos to make them available for project linking.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 280, alignment: .leading)
+                }
+            }
+            ForEach(Array(sourceDirectories.enumerated()), id: \.offset) { index, url in
+                HStack {
+                    Text(url.path)
+                        .font(.caption)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Spacer()
+                    Button("Remove") {
+                        sourceDirectories.remove(at: index)
+                        saveSourceDirectories()
+                    }
+                    .buttonStyle(.borderless)
+                    .controlSize(.small)
+                    .font(.caption)
+                }
+            }
+            Button("Add Directory") {
+                addSourceDirectory()
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+        }
+    }
+
+    private func loadSourceDirectories() {
+        sourceDirectories = ProjectSymlinkService.skillSourceDirectories()
+    }
+
+    private func saveSourceDirectories() {
+        ProjectSymlinkService.saveSourceDirectories(sourceDirectories)
+    }
+
+    private func addSourceDirectory() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Add"
+        panel.message = "Select a directory containing skill repos."
+        panel.directoryURL = FileManager.default.homeDirectoryForCurrentUser
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        if !sourceDirectories.contains(where: { $0.path == url.path }) {
+            sourceDirectories.append(url)
+            saveSourceDirectories()
         }
     }
 }

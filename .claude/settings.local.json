@@ -4,7 +4,20 @@
       "Bash(node:*)",
       "Bash(python3:*)",
       "Read(//Users/chenyibin/.agents/skills/find-skills/**)",
-      "Read(//Users/chenyibin/.roo/skills/**)"
+      "Read(//Users/chenyibin/.roo/skills/**)",
+      "Bash(xcodebuild -project SkillsManager.xcodeproj -scheme SkillsManager -resolvePackageDependencies build)",
+      "Bash(xcodebuild -project SkillsManager.xcodeproj -scheme SkillsManager build ONLY_ACTIVE_ARCH=YES)",
+      "Bash(rm -rf ~/Library/Developer/Xcode/DerivedData/SkillsManager-*)",
+      "Bash(xcodebuild -project SkillsManager.xcodeproj -scheme SkillsManager -resolvePackageDependencies clean build)",
+      "Bash(xcodebuild -project SkillsManager.xcodeproj -scheme SkillsManager -resolvePackageDependencies build -showBuildLogging)",
+      "Bash(xcodebuild -project SkillsManager.xcodeproj -scheme SkillsManager)",
+      "Bash(killall Xcode)",
+      "Bash(killall xcodebuild *)",
+      "Bash(killall -9 com.apple.dt.XCBuild)",
+      "Bash(rm -rf ~/Library/Developer/Xcode/DerivedData/ModuleCache.noindex)",
+      "Bash(defaults read *)",
+      "Bash(ls -la /Users/maotong/Desktop/knowledge-skill/)",
+      "Bash(git add *)"
     ]
   }
 }

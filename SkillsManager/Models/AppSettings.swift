@@ -304,6 +304,8 @@ enum AppSettings {
 
     static let importedAgentFoldersKey = "importedAgentFolders"
 
+    static let skillSourceDirectoriesKey = "skillSourceDirectories"
+
     static func currentDescriptionLocale(defaults: UserDefaults = .standard, locale: Locale = .autoupdatingCurrent) -> String {
         let mode = DescriptionLanguageMode(rawValue: defaults.string(forKey: descriptionLanguageModeKey) ?? "") ?? .system
         switch mode {

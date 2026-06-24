@@ -7,6 +7,7 @@ struct SkillDetailView: View {
     var isTranslatingDescription = false
     var onToggleStar: () -> Void = {}
     var onPromote: (Skill) async -> Void = { _ in }
+    var onUnlinkFromProject: (Skill) async -> Void = { _ in }
     var onInstallToAgent: (Skill, [String]) async -> Void = { _, _ in }
     var onTranslate: (Skill) async -> Void = { _ in }
 
@@ -19,6 +20,7 @@ struct SkillDetailView: View {
                     onToggleStar: onToggleStar,
                     // Fire-and-forget tasks: errors surface via SkillStore.errorMessage, not thrown here.
                     onPromote: { Task { await onPromote(skill) } },
+                    onUnlinkFromProject: { Task { await onUnlinkFromProject(skill) } },
                     onInstallToAgent: { agentIDs in Task { await onInstallToAgent(skill, agentIDs) } },
                     onTranslate: { Task { await onTranslate(skill) } }
                 )
@@ -45,6 +47,7 @@ private struct DetailContent: View {
     let isTranslatingDescription: Bool
     let onToggleStar: () -> Void
     let onPromote: () -> Void
+    let onUnlinkFromProject: () -> Void
     let onInstallToAgent: ([String]) -> Void
     let onTranslate: () -> Void
 
@@ -135,6 +138,7 @@ private struct DetailContent: View {
         case .symlinked:                      label = "Symlinked"
         case .plugin(let pluginSource, _):    label = pluginSource
         case .projectLocal:                   label = "Project"
+        case .projectLinked:                  label = "Project Linked"
         }
         return SkillMetaBadge(text: label)
     }
@@ -147,6 +151,10 @@ private struct DetailContent: View {
 
             if case .projectLocal = skill.source {
                 promoteButton
+            }
+
+            if case .projectLinked = skill.source {
+                unlinkButton
             }
 
             installButton
@@ -202,6 +210,17 @@ private struct DetailContent: View {
         }
         .buttonStyle(.bordered)
         .controlSize(.small)
+    }
+
+    private var unlinkButton: some View {
+        Button {
+            onUnlinkFromProject()
+        } label: {
+            Label("Unlink from Project", systemImage: "link.badge.minus")
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .tint(.red)
     }
 
     private var installButton: some View {

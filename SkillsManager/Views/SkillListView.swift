@@ -60,6 +60,7 @@ struct SkillListView: View {
                 case .symlinked: name.lowercased() == "symlinked"
                 case .plugin(let pluginSource, _): pluginSource.lowercased() == name.lowercased()
                 case .projectLocal: false
+                case .projectLinked: false
                 }
             }
         }
@@ -235,6 +236,9 @@ private struct SkillRow: View {
         case .projectLocal:
             label = "Project"
             tint = .secondary
+        case .projectLinked:
+            label = "Project Linked"
+            tint = .green
         }
         return SkillMetaBadge(text: label, tint: tint)
     }
